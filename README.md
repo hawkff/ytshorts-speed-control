@@ -64,8 +64,8 @@ The helpers in `lib/speed.js` are covered by unit tests in
 ## Privacy and permissions
 
 - **Storage** — to remember your chosen speed and settings
-- **Host access to youtube.com** — to read/adjust the video element on YouTube
-  pages
+- **Host access to `youtube.com`** — to read/adjust the video element on
+  YouTube pages
 
 No data leaves your browser.
 
