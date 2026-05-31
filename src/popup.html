@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>YT Shorts Speed</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="header">
+      <span class="bolt" aria-hidden="true">&#9889;</span>
+      <h1 class="title">Shorts Speed</h1>
+    </header>
+
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+
+    <div class="current">
+      <span id="current-speed" class="current-speed">1x</span>
+    </div>
+
+    <div class="slider-row">
+      <input
+        id="slider"
+        class="slider"
+        type="range"
+        min="0.25"
+        max="4"
+        step="0.05"
+        value="1"
+        aria-label="Playback speed"
+      />
+    </div>
+
+    <div id="presets" class="presets" role="group" aria-label="Speed presets">
+    </div>
+
+    <form id="custom-form" class="custom-form" autocomplete="off">
+      <label class="custom-label" for="custom-input">Custom</label>
+      <input
+        id="custom-input"
+        class="custom-input"
+        type="number"
+        min="0.1"
+        max="16"
+        step="0.05"
+        inputmode="decimal"
+        placeholder="e.g. 1.75"
+        aria-label="Custom playback speed"
+      />
+      <button id="custom-apply" class="custom-apply" type="submit">Set</button>
+    </form>
+
+    <button id="reset" class="reset" type="button">Reset to 1x</button>
+
+    <footer class="footer">
+      <p class="hint">
+        Shortcuts: <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>.</kbd> faster,
+        <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>,</kbd> slower,
+        <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>0</kbd> reset.
+      </p>
+    </footer>
+
+    <script src="../lib/speed.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>
