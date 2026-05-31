@@ -97,6 +97,48 @@
   }
 
   /**
+   * Area of a video's intersection with the viewport. Used to find the Short
+   * the user is actually looking at when several recycled <video> nodes exist.
+   * @param {HTMLVideoElement} video
+   * @returns {number}
+   */
+  function viewportVisibleArea(video) {
+    const r = video.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return 0;
+    const vw = globalThis.innerWidth || document.documentElement.clientWidth;
+    const vh = globalThis.innerHeight || document.documentElement.clientHeight;
+    const w = Math.max(0, Math.min(r.right, vw) - Math.max(r.left, 0));
+    const h = Math.max(0, Math.min(r.bottom, vh) - Math.max(r.top, 0));
+    return w * h;
+  }
+
+  /**
+   * The video the user is most likely watching: the one with the largest
+   * visible area in the viewport, but only if it covers a meaningful share of
+   * its own box (so a sliver-sized recycled node or mini-player can't win).
+   * Falls back to findActiveVideo() when nothing is meaningfully on screen.
+   * @returns {HTMLVideoElement | null}
+   */
+  function getVisibleVideo() {
+    const videos = Array.from(document.querySelectorAll("video"));
+    if (videos.length === 0) return null;
+    let best = null;
+    let bestArea = 0;
+    for (const v of videos) {
+      const area = viewportVisibleArea(v);
+      if (area <= bestArea) continue;
+      // Require at least ~35% of the element to be on screen to count as the
+      // one being watched; this rejects tiny slivers peeking into the viewport.
+      const r = v.getBoundingClientRect();
+      const boxArea = r.width * r.height;
+      if (boxArea <= 0 || area / boxArea < 0.35) continue;
+      bestArea = area;
+      best = v;
+    }
+    return best || findActiveVideo();
+  }
+
+  /**
    * Apply desiredSpeed to a video element.
    *
    * No timing-based "is this our own write" guard is needed: the decision is
@@ -180,27 +222,123 @@
   }
 
   /**
-   * Toggle play/pause on the active video. Mirrors YouTube's own behavior but
-   * lets us bind it to a single key (P) on Shorts, where YouTube has no such
-   * shortcut. Shows a transient indicator with the new state.
+   * Toggle play/pause on the video the user is actually watching.
+   *
+   * Bound to P, which YouTube Shorts lacks. Two subtleties this handles:
+   *  - On Shorts several recycled <video> nodes exist; we act on the one most
+   *    visible in the viewport, not a possibly-stale managedVideo.
+   *  - After we pause, YouTube's player keeps trying to resume. We hold a
+   *    "user paused" intent and re-pause until the user plays again or leaves.
    */
   function togglePlayPause() {
-    const video = managedVideo || findActiveVideo();
+    const video = getVisibleVideo();
     if (!video) return;
     try {
       if (video.paused) {
-        // play() returns a promise that can reject (e.g. autoplay policy);
-        // swallow it so we don't throw an unhandled rejection.
-        const p = video.play();
-        if (p && typeof p.catch === "function") p.catch(() => {});
+        userPlay(video);
         showStatusIndicator("\u25B6 Play");
       } else {
-        video.pause();
+        userPause(video);
         showStatusIndicator("\u23F8 Pause");
       }
     } catch (err) {
       console.error("[YTShortsSpeed] play/pause toggle failed", err);
     }
+  }
+
+  // Pause enforcement. After the user pauses with P, YouTube's player tries to
+  // auto-resume (programmatically, within a few hundred ms). We re-pause during
+  // a short window so the pause sticks. A deliberate user interaction (click,
+  // tap, or any key) immediately ends enforcement so the user can resume.
+  let pausedVideo = null;
+  let pauseEnforceUntil = 0;
+
+  /** Begin honoring a user-requested pause and resist YouTube re-playing it. */
+  function userPause(video) {
+    releasePause();
+    pausedVideo = video;
+    pauseEnforceUntil = Date.now() + 1500;
+    video.addEventListener("play", reassertPause, true);
+    video.addEventListener("playing", reassertPause, true);
+    // A genuine user gesture should win over enforcement: stop resisting as
+    // soon as the user clicks/taps or presses a key (other than our own P,
+    // which is handled in onKeyDown before this fires).
+    globalThis.addEventListener("pointerdown", onUserGestureDuringPause, true);
+    globalThis.addEventListener("keydown", onUserGestureDuringPause, true);
+    video.pause();
+    // Belt-and-suspenders: also poll briefly, in case a resume path fires no
+    // play/playing event we caught.
+    schedulePauseSweep();
+  }
+
+  /** Honor a user-requested play and stop resisting playback. */
+  function userPlay(video) {
+    releasePause();
+    // play() returns a promise that can reject (e.g. autoplay policy);
+    // swallow it so we don't throw an unhandled rejection.
+    const p = video.play();
+    if (p && typeof p.catch === "function") p.catch(() => {});
+  }
+
+  /** Stop enforcing any pause intent. */
+  function releasePause() {
+    if (!pausedVideo) return;
+    pausedVideo.removeEventListener("play", reassertPause, true);
+    pausedVideo.removeEventListener("playing", reassertPause, true);
+    globalThis.removeEventListener(
+      "pointerdown",
+      onUserGestureDuringPause,
+      true,
+    );
+    globalThis.removeEventListener("keydown", onUserGestureDuringPause, true);
+    pausedVideo = null;
+    pauseEnforceUntil = 0;
+  }
+
+  /**
+   * Any deliberate user interaction during the enforcement window means the
+   * user is taking over (e.g. clicking play). Our own P press is handled and
+   * stopped earlier in onKeyDown, so it won't reach this. Release on the next
+   * tick so the user's resume isn't immediately re-paused.
+   */
+  function onUserGestureDuringPause() {
+    setTimeout(releasePause, 0);
+  }
+
+  /** Re-pause the video YouTube is trying to auto-resume, within the window. */
+  function reassertPause() {
+    if (!pausedVideo) return;
+    if (Date.now() > pauseEnforceUntil) {
+      releasePause();
+      return;
+    }
+    if (!pausedVideo.paused) {
+      try {
+        pausedVideo.pause();
+      } catch (_err) {
+        // ignore
+      }
+    }
+  }
+
+  /** Poll a few times during the enforcement window as a fallback. */
+  function schedulePauseSweep() {
+    const tick = () => {
+      if (!pausedVideo) return;
+      if (Date.now() > pauseEnforceUntil) {
+        releasePause();
+        return;
+      }
+      if (!pausedVideo.paused) {
+        try {
+          pausedVideo.pause();
+        } catch (_err) {
+          // ignore
+        }
+      }
+      setTimeout(tick, 100);
+    };
+    setTimeout(tick, 100);
   }
 
   /**
@@ -460,7 +598,9 @@
   // ---- SPA navigation + DOM churn handling ------------------------------
 
   function onNavigate() {
-    // New Short: managed video is likely stale. Detach and re-resolve.
+    // New Short: managed video is likely stale, and any pause intent applied
+    // to the previous Short must not carry over to the next one.
+    releasePause();
     detach();
     // Give YouTube a tick to mount the new <video>, then reassert.
     setTimeout(reapply, 0);

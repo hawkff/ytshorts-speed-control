@@ -68,6 +68,11 @@ The helpers in `lib/speed.js` are covered by unit tests in
 
 ## Privacy and permissions
 
+This extension is privacy-respecting by design: it makes **no network
+requests**, collects **no data**, and includes **no tracking or analytics**.
+Your chosen speed and settings are stored locally on your device via the
+browser's storage API.
+
 - **Storage** — to remember your chosen speed and settings
 - **Host access to `youtube.com`** — to read/adjust the video element on
   YouTube pages
