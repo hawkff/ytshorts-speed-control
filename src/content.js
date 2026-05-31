@@ -1,6 +1,9 @@
 /**
  * Content script for YT Shorts Speed Control.
  *
+ * Copyright (C) 2026 hawkff
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ *
  * Responsibilities:
  *  - Track the currently active <video> element on a Shorts page.
  *  - Apply the user's chosen playback speed and keep re-applying it, because

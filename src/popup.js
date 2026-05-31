@@ -1,6 +1,9 @@
 /**
  * Popup UI logic for YT Shorts Speed Control.
  *
+ * Copyright (C) 2026 hawkff
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ *
  * Talks to the active tab's content script via chrome.tabs.sendMessage and
  * persists the chosen speed through chrome.storage.local (the content script
  * also listens to storage changes, so the popup and page stay in sync).
