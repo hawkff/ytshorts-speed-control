@@ -279,9 +279,20 @@
       return; // not ours; let the page handle it
     }
 
-    // For Backspace, ignore real modifier combos (e.g. Cmd/Alt+Backspace are
-    // browser/OS navigation/delete). Brackets may legitimately need AltGr
-    // (reported as Ctrl+Alt) on some layouts, so we don't block those here.
+    // Don't hijack modified combos. Brackets may legitimately need AltGr on
+    // some layouts (and AltGr reports as Ctrl+Alt), so allow a genuine AltGraph
+    // modifier but ignore other Cmd/Ctrl/Alt combos so browser/system shortcuts
+    // (e.g. Cmd+[ / Cmd+] back/forward) keep working. Backspace never uses a
+    // modifier here (Cmd/Alt+Backspace are OS navigation/delete).
+    const isAltGraph = typeof e.getModifierState === "function" &&
+      e.getModifierState("AltGraph");
+
+    if (
+      (action === "up" || action === "down") &&
+      (e.metaKey || (!isAltGraph && (e.ctrlKey || e.altKey)))
+    ) {
+      return;
+    }
     if (action === "reset" && (e.ctrlKey || e.metaKey || e.altKey)) return;
 
     switch (action) {
