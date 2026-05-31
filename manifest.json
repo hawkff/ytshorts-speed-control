@@ -1,0 +1,53 @@
+{
+  "manifest_version": 3,
+  "name": "YT Shorts Speed Control",
+  "version": "1.0.0",
+  "description": "Choose and control the playback speed of YouTube Shorts, with presets, a slider, and keyboard shortcuts.",
+  "permissions": ["storage"],
+  "host_permissions": ["https://www.youtube.com/*", "https://m.youtube.com/*"],
+  "action": {
+    "default_title": "YT Shorts Speed Control",
+    "default_popup": "src/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*", "https://m.youtube.com/*"],
+      "js": ["lib/speed.js", "src/content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "commands": {
+    "speed-up": {
+      "suggested_key": {
+        "default": "Alt+Shift+Period"
+      },
+      "description": "Increase Shorts playback speed"
+    },
+    "speed-down": {
+      "suggested_key": {
+        "default": "Alt+Shift+Comma"
+      },
+      "description": "Decrease Shorts playback speed"
+    },
+    "speed-reset": {
+      "suggested_key": {
+        "default": "Alt+Shift+0"
+      },
+      "description": "Reset Shorts playback speed to 1x"
+    }
+  }
+}

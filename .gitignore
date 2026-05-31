@@ -1,0 +1,9 @@
+#MacOS specific files
+._*
+**/._*
+.DS_Store
+
+#IDE
+.agents*
+skills-lock.json
+
