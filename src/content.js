@@ -256,9 +256,10 @@
 
   function onKeyDown(e) {
     if (!isShortsPage()) return;
-    // Ignore combos with modifiers and repeats so we don't fight YouTube or
-    // browser shortcuts, and don't steal keys while the user is typing.
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    // Ignore combos with modifiers and key-repeat (holding a key) so we don't
+    // fight YouTube/browser shortcuts or rocket the speed to its limit, and
+    // don't steal keys while the user is typing.
+    if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
     if (e.defaultPrevented || isEditableTarget(e.target)) return;
 
     switch (e.key) {
