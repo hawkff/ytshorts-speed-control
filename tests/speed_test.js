@@ -15,6 +15,7 @@ Deno.test("API is exposed on globalThis", () => {
   assertEquals(Speed.DEFAULT_SPEED, 1);
   assertEquals(Speed.SPEED_MIN, 0.1);
   assertEquals(Speed.SPEED_MAX, 16);
+  assertEquals(Speed.KEYBOARD_STEP, 0.25);
 });
 
 Deno.test("roundSpeed kills floating-point dust", () => {
