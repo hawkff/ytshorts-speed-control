@@ -77,12 +77,16 @@
     });
   }
 
-  /** Apply a new speed: persist, tell the page, and update the UI. */
+  /**
+   * Apply a new speed: persist, tell the page, and update the UI.
+   * @param {unknown} value
+   * @returns {Promise<boolean>} true if the value parsed and was applied.
+   */
   async function applySpeed(value) {
     const parsed = Speed.parseSpeed(value);
     if (parsed === null) {
       setStatus("Enter a speed between 0.1 and 16.", true);
-      return;
+      return false;
     }
     render(parsed);
     // Persist first so the value survives even if no content script is present.
@@ -95,6 +99,7 @@
     if (res && res.ok) {
       setStatus(`Playing at ${Speed.formatSpeed(parsed)}.`, false);
     }
+    return true;
   }
 
   function buildPresets() {
@@ -119,10 +124,12 @@
       applySpeed(Number(els.slider.value));
     });
 
-    els.customForm.addEventListener("submit", (e) => {
+    els.customForm.addEventListener("submit", async (e) => {
       e.preventDefault();
-      applySpeed(els.customInput.value);
-      els.customInput.value = "";
+      // Only clear the field once the value is accepted, so invalid input is
+      // preserved for the user to correct.
+      const applied = await applySpeed(els.customInput.value);
+      if (applied) els.customInput.value = "";
     });
 
     els.reset.addEventListener("click", () => applySpeed(Speed.DEFAULT_SPEED));
