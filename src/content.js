@@ -240,6 +240,27 @@
   }
 
   let lastHref = location.href;
+  let scheduledRaf = false;
+
+  /**
+   * Coalesce the expensive "did a new video mount?" check to at most once per
+   * animation frame. YouTube fires DOM mutations very frequently, so running
+   * findActiveVideo() (a querySelectorAll + scan) on every mutation is wasteful.
+   */
+  function scheduleVideoCheck() {
+    if (scheduledRaf) return;
+    scheduledRaf = true;
+    const run = () => {
+      scheduledRaf = false;
+      const active = findActiveVideo();
+      if (active && active !== managedVideo) reapply();
+    };
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(run);
+    } else {
+      setTimeout(run, 16);
+    }
+  }
 
   function startObservers() {
     // YouTube fires this custom event on SPA navigation.
@@ -248,14 +269,15 @@
 
     // Fallback: detect URL changes and DOM mutations (video recycling).
     const mo = new MutationObserver(() => {
+      // URL-change handling stays synchronous so navigation reacts instantly.
       if (location.href !== lastHref) {
         lastHref = location.href;
         onNavigate();
         return;
       }
       // A new video element may have been mounted without a URL change.
-      const active = findActiveVideo();
-      if (active && active !== managedVideo) reapply();
+      // Defer the expensive lookup and coalesce bursts of mutations.
+      scheduleVideoCheck();
     });
     if (document.documentElement) {
       mo.observe(document.documentElement, { childList: true, subtree: true });
