@@ -110,6 +110,7 @@ body {
 .custom-input:focus-visible,
 .custom-apply:focus-visible,
 .reset:focus-visible,
+.setting-checkbox:focus-visible,
 .slider:focus-visible {
   outline: 2px solid #4d90fe;
   outline-offset: 1px;
@@ -167,6 +168,46 @@ body {
 
 .reset:hover {
   background: var(--surface-hover);
+}
+
+.settings {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.setting-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  cursor: pointer;
+}
+
+.setting-checkbox {
+  margin: 2px 0 0;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.setting-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.setting-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.setting-desc {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-dim);
 }
 
 .footer {

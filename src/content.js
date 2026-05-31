@@ -25,12 +25,22 @@
   }
 
   const STORAGE_KEY = "speed";
+  const SETTINGS_KEY = "settings";
   const KEYBOARD_STEP = 0.25;
   const INDICATOR_ID = "yt-shorts-speed-indicator";
   const INDICATOR_TIMEOUT_MS = 1200;
 
+  /** Default settings; merged over whatever is persisted. */
+  const DEFAULT_SETTINGS = Object.freeze({
+    // When true, the same speed control also applies to regular YouTube
+    // watch pages (/watch). Off by default: Shorts only.
+    enableOnWatch: false,
+  });
+
   /** Current desired speed; mirrors chrome.storage.local[STORAGE_KEY]. */
   let desiredSpeed = Speed.DEFAULT_SPEED;
+  /** Current settings; mirrors chrome.storage.local[SETTINGS_KEY]. */
+  let settings = { ...DEFAULT_SETTINGS };
   /** The video we are currently managing, if any. */
   let managedVideo = null;
   let indicatorTimer = null;
@@ -51,6 +61,22 @@
   /** True only on actual Shorts pages (/shorts/...). */
   function isShortsPage() {
     return location.pathname.startsWith("/shorts/");
+  }
+
+  /** True on regular YouTube watch pages (/watch). */
+  function isWatchPage() {
+    return location.pathname === "/watch";
+  }
+
+  /**
+   * Whether speed control should be active on the current page.
+   * Always active on Shorts; active on /watch only when the user opted in.
+   * @returns {boolean}
+   */
+  function isActivePage() {
+    if (isShortsPage()) return true;
+    if (isWatchPage() && settings.enableOnWatch) return true;
+    return false;
   }
 
   /**
@@ -94,7 +120,7 @@
 
   /** Re-apply to whatever the active video currently is. */
   function reapply() {
-    if (!isShortsPage()) return;
+    if (!isActivePage()) return;
     const video = findActiveVideo();
     if (video && video !== managedVideo) {
       attachTo(video);
@@ -153,6 +179,70 @@
     }
   }
 
+  /**
+   * Coerce arbitrary input into a valid settings object (only known keys,
+   * correct types), merged over the current settings.
+   * @param {Record<string, unknown>} incoming
+   * @returns {typeof DEFAULT_SETTINGS}
+   */
+  function normalizeSettings(incoming) {
+    const next = { ...DEFAULT_SETTINGS, ...settings };
+    if (typeof incoming.enableOnWatch === "boolean") {
+      next.enableOnWatch = incoming.enableOnWatch;
+    }
+    return next;
+  }
+
+  /**
+   * Apply settings side-effects after `settings` has been updated: either
+   * re-assert speed on a now-active page, or release control + reset to 1x if
+   * the page just became inactive.
+   * @param {boolean} wasActive whether the page was active before the change
+   */
+  function reconcileAfterSettings(wasActive) {
+    if (isActivePage()) {
+      reapply();
+    } else if (wasActive && managedVideo) {
+      // Just deactivated on this page: release control and reset to 1x.
+      const video = managedVideo;
+      detach();
+      try {
+        if (!ratesEqual(video.playbackRate, Speed.DEFAULT_SPEED)) {
+          video.playbackRate = Speed.DEFAULT_SPEED;
+        }
+      } catch (err) {
+        console.error("[YTShortsSpeed] failed to reset playbackRate", err);
+      }
+    }
+  }
+
+  /**
+   * Update in-memory settings from external input (no persistence). Used by the
+   * storage.onChanged listener, which must NOT re-write storage or it loops.
+   * @param {Record<string, unknown>} incoming
+   */
+  function adoptSettings(incoming) {
+    const wasActive = isActivePage();
+    settings = normalizeSettings(incoming);
+    reconcileAfterSettings(wasActive);
+  }
+
+  /**
+   * Persist + apply new settings (used by the SET_SETTINGS message from the
+   * popup). Writes storage, then applies side-effects.
+   * @param {Record<string, unknown>} incoming
+   */
+  function applySettings(incoming) {
+    const wasActive = isActivePage();
+    settings = normalizeSettings(incoming);
+    try {
+      chrome.storage.local.set({ [SETTINGS_KEY]: { ...settings } });
+    } catch (err) {
+      console.error("[YTShortsSpeed] settings.set failed", err);
+    }
+    reconcileAfterSettings(wasActive);
+  }
+
   /** Render a transient speed badge over the player. */
   function showIndicator(value) {
     if (!document.body) return;
@@ -198,8 +288,21 @@
         sendResponse({
           speed: desiredSpeed,
           isShorts: isShortsPage(),
+          isWatch: isWatchPage(),
+          isActive: isActivePage(),
           hasVideo: !!findActiveVideo(),
+          settings: { ...settings },
         });
+        return true;
+      }
+      case "SET_SETTINGS": {
+        const incoming = msg.settings;
+        if (!incoming || typeof incoming !== "object") {
+          sendResponse({ ok: false, error: "invalid settings" });
+          return true;
+        }
+        applySettings(incoming);
+        sendResponse({ ok: true, settings: { ...settings } });
         return true;
       }
       case "SET_SPEED": {
@@ -236,7 +339,7 @@
   //
   // Chrome's manifest `commands` API can't bind bare keys (no modifier), so
   // single-key shortcuts are handled here, the same way YouTube handles its
-  // own j/k/l keys. Active only on Shorts pages.
+  // own j/k/l keys. Active on Shorts, and on /watch when the user opts in.
   //
   //   ]          -> speed up
   //   [          -> speed down
@@ -258,7 +361,7 @@
   }
 
   function onKeyDown(e) {
-    if (!isShortsPage()) return;
+    if (!isActivePage()) return;
     // Don't steal keys while the user is typing in a field.
     if (isEditableTarget(e.target)) return;
     // Ignore key-repeat (holding a key) so we step once per press instead of
@@ -383,22 +486,39 @@
     // React to changes from the popup made while we're alive.
     try {
       chrome.storage.onChanged.addListener((changes, area) => {
-        if (area !== "local" || !changes[STORAGE_KEY]) return;
-        const next = Speed.parseSpeed(changes[STORAGE_KEY].newValue);
-        if (next !== null && next !== desiredSpeed) {
-          desiredSpeed = next;
-          reapply();
+        if (area !== "local") return;
+        if (changes[STORAGE_KEY]) {
+          const next = Speed.parseSpeed(changes[STORAGE_KEY].newValue);
+          if (next !== null && next !== desiredSpeed) {
+            desiredSpeed = next;
+            reapply();
+          }
+        }
+        if (changes[SETTINGS_KEY]) {
+          const incoming = changes[SETTINGS_KEY].newValue;
+          // adoptSettings does NOT re-persist, avoiding a storage write loop.
+          // If the key was removed (newValue undefined), fall back to defaults
+          // so stale opt-in state doesn't linger until reload.
+          if (incoming && typeof incoming === "object") {
+            adoptSettings(incoming);
+          } else {
+            adoptSettings({});
+          }
         }
       });
     } catch (err) {
       console.error("[YTShortsSpeed] cannot watch storage", err);
     }
 
-    // Load the persisted speed, then start managing.
+    // Load the persisted speed + settings, then start managing.
     try {
-      chrome.storage.local.get(STORAGE_KEY, (data) => {
+      chrome.storage.local.get([STORAGE_KEY, SETTINGS_KEY], (data) => {
         const stored = Speed.parseSpeed(data && data[STORAGE_KEY]);
         if (stored !== null) desiredSpeed = stored;
+        const storedSettings = data && data[SETTINGS_KEY];
+        if (storedSettings && typeof storedSettings === "object") {
+          settings = normalizeSettings(storedSettings);
+        }
         startObservers();
         reapply();
       });
