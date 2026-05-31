@@ -22,6 +22,9 @@
     customInput: document.getElementById("custom-input"),
     reset: document.getElementById("reset"),
     enableOnWatch: document.getElementById("enable-on-watch"),
+    hintUp: document.getElementById("hint-up"),
+    hintDown: document.getElementById("hint-down"),
+    hintReset: document.getElementById("hint-reset"),
   };
 
   /** Mirror of content.js DEFAULT_SETTINGS; keep the two in sync. */
@@ -124,6 +127,19 @@
     els.enableOnWatch.checked = settings.enableOnWatch;
   }
 
+  /**
+   * Fill the keyboard-shortcut hints from the shared constants so the popup
+   * text can never drift from the runtime step / reset values.
+   */
+  function renderShortcutHints() {
+    const step = Speed.formatSpeed(Speed.KEYBOARD_STEP);
+    // Reset target shown with one decimal (e.g. "1.0x") for readability.
+    const resetTarget = `${Speed.DEFAULT_SPEED.toFixed(1)}x`;
+    els.hintUp.textContent = `Increase speed by ${step}`;
+    els.hintDown.textContent = `Decrease speed by ${step}`;
+    els.hintReset.textContent = `Reset speed to ${resetTarget}`;
+  }
+
   /** Persist settings and notify the page so it applies them live. */
   async function applySettings(next) {
     settings = normalizeSettings(next);
@@ -177,6 +193,7 @@
   async function bootstrap() {
     buildPresets();
     wireControls();
+    renderShortcutHints();
 
     // Prefer the live state from the content script; fall back to storage.
     const tab = await getActiveTab();

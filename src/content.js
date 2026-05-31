@@ -26,7 +26,7 @@
 
   const STORAGE_KEY = "speed";
   const SETTINGS_KEY = "settings";
-  const KEYBOARD_STEP = 0.25;
+  const KEYBOARD_STEP = Speed.KEYBOARD_STEP;
   const INDICATOR_ID = "yt-shorts-speed-indicator";
   const INDICATOR_TIMEOUT_MS = 1200;
 
