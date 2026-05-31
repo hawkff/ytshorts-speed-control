@@ -259,27 +259,57 @@
 
   function onKeyDown(e) {
     if (!isShortsPage()) return;
-    // Ignore combos with modifiers and key-repeat (holding a key) so we don't
-    // fight YouTube/browser shortcuts or rocket the speed to its limit, and
-    // don't steal keys while the user is typing.
-    if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
-    if (e.defaultPrevented || isEditableTarget(e.target)) return;
+    // Don't steal keys while the user is typing in a field.
+    if (isEditableTarget(e.target)) return;
+    // Ignore key-repeat (holding a key) so we step once per press instead of
+    // rocketing the speed to its limit.
+    if (e.repeat) return;
 
-    switch (e.key) {
-      case "]":
+    // Identify the intended action. Match on e.key (the produced character)
+    // first, then fall back to e.code (physical key position) so layouts where
+    // [ and ] sit elsewhere, or require AltGr, still work.
+    let action = null;
+    if (e.key === "]" || e.code === "BracketRight") {
+      action = "up";
+    } else if (e.key === "[" || e.code === "BracketLeft") {
+      action = "down";
+    } else if (e.key === "Backspace" || e.code === "Backspace") {
+      action = "reset";
+    } else {
+      return; // not ours; let the page handle it
+    }
+
+    // Don't hijack modified combos. Brackets may legitimately need AltGr on
+    // some layouts (and AltGr reports as Ctrl+Alt), so allow a genuine AltGraph
+    // modifier but ignore other Cmd/Ctrl/Alt combos so browser/system shortcuts
+    // (e.g. Cmd+[ / Cmd+] back/forward) keep working. Backspace never uses a
+    // modifier here (Cmd/Alt+Backspace are OS navigation/delete).
+    const isAltGraph = typeof e.getModifierState === "function" &&
+      e.getModifierState("AltGraph");
+
+    if (
+      (action === "up" || action === "down") &&
+      (e.metaKey || (!isAltGraph && (e.ctrlKey || e.altKey)))
+    ) {
+      return;
+    }
+    if (action === "reset" && (e.ctrlKey || e.metaKey || e.altKey)) return;
+
+    switch (action) {
+      case "up":
         setSpeed(Speed.adjustSpeed(desiredSpeed, KEYBOARD_STEP));
         break;
-      case "[":
+      case "down":
         setSpeed(Speed.adjustSpeed(desiredSpeed, -KEYBOARD_STEP));
         break;
-      case "Backspace":
+      case "reset":
         setSpeed(Speed.DEFAULT_SPEED);
         break;
-      default:
-        return; // not ours; let the page handle it
     }
     // We acted: stop YouTube from also reacting (e.g. Backspace = back nav).
+    // stopImmediatePropagation also blocks other listeners on this same target.
     e.preventDefault();
+    e.stopImmediatePropagation();
     e.stopPropagation();
   }
 
@@ -350,9 +380,6 @@
       console.error("[YTShortsSpeed] cannot register message listener", err);
     }
 
-    // Capture-phase so our keys run before YouTube's own keyboard handlers.
-    globalThis.addEventListener("keydown", onKeyDown, true);
-
     // React to changes from the popup made while we're alive.
     try {
       chrome.storage.onChanged.addListener((changes, area) => {
@@ -381,6 +408,12 @@
       reapply();
     }
   }
+
+  // Register the keyboard listener synchronously at document_start, BEFORE
+  // YouTube's app scripts load. On the capture phase, listeners on the same
+  // target fire in registration order, so registering first lets us claim
+  // ] / [ / Backspace before YouTube's own handlers can act on them.
+  globalThis.addEventListener("keydown", onKeyDown, true);
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init, { once: true });
