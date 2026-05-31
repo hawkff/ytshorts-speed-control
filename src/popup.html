@@ -9,7 +9,7 @@
   <body>
     <header class="header">
       <span class="bolt" aria-hidden="true">&#9889;</span>
-      <h1 class="title">Shorts Speed</h1>
+      <h1 class="title">Speed</h1>
     </header>
 
     <p id="status" class="status" role="status" aria-live="polite"></p>
@@ -65,10 +65,21 @@
     </section>
 
     <footer class="footer">
-      <p class="hint">
-        Press: <kbd>]</kbd> faster, <kbd>[</kbd> slower,
-        <kbd>Backspace</kbd> reset to 1x.
-      </p>
+      <p class="hint-title">Press:</p>
+      <ul class="shortcuts">
+        <li class="shortcut">
+          <kbd>]</kbd>
+          <span class="shortcut-desc">Increase speed by 0.25x</span>
+        </li>
+        <li class="shortcut">
+          <kbd>[</kbd>
+          <span class="shortcut-desc">Decrease speed by 0.25x</span>
+        </li>
+        <li class="shortcut">
+          <kbd>Backspace</kbd>
+          <span class="shortcut-desc">Reset speed to 1.0x</span>
+        </li>
+      </ul>
     </footer>
 
     <script src="../lib/speed.js"></script>

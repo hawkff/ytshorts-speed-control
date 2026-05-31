@@ -214,11 +214,38 @@ body {
   margin-top: 12px;
 }
 
-.hint {
-  margin: 0;
+.hint-title {
+  margin: 0 0 6px;
   font-size: 11px;
-  line-height: 1.5;
+  font-weight: 600;
   color: var(--text-dim);
+}
+
+.shortcuts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.shortcut {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.shortcut kbd {
+  flex: 0 0 auto;
+  min-width: 18px;
+  text-align: center;
+}
+
+.shortcut-desc {
+  flex: 1;
 }
 
 kbd {
