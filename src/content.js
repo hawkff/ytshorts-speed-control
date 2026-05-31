@@ -114,8 +114,9 @@
 
   /**
    * The video the user is most likely watching: the one with the largest
-   * visible area in the viewport. Falls back to findActiveVideo() when nothing
-   * is meaningfully on screen (e.g. a hidden mini-player).
+   * visible area in the viewport, but only if it covers a meaningful share of
+   * its own box (so a sliver-sized recycled node or mini-player can't win).
+   * Falls back to findActiveVideo() when nothing is meaningfully on screen.
    * @returns {HTMLVideoElement | null}
    */
   function getVisibleVideo() {
@@ -125,10 +126,14 @@
     let bestArea = 0;
     for (const v of videos) {
       const area = viewportVisibleArea(v);
-      if (area > bestArea) {
-        bestArea = area;
-        best = v;
-      }
+      if (area <= bestArea) continue;
+      // Require at least ~35% of the element to be on screen to count as the
+      // one being watched; this rejects tiny slivers peeking into the viewport.
+      const r = v.getBoundingClientRect();
+      const boxArea = r.width * r.height;
+      if (boxArea <= 0 || area / boxArea < 0.35) continue;
+      bestArea = area;
+      best = v;
     }
     return best || findActiveVideo();
   }
@@ -242,8 +247,9 @@
   }
 
   // Pause enforcement. After the user pauses with P, YouTube's player tries to
-  // auto-resume (typically within a few hundred ms). We re-pause during a short
-  // window so the pause sticks, then stop so a deliberate user click can play.
+  // auto-resume (programmatically, within a few hundred ms). We re-pause during
+  // a short window so the pause sticks. A deliberate user interaction (click,
+  // tap, or any key) immediately ends enforcement so the user can resume.
   let pausedVideo = null;
   let pauseEnforceUntil = 0;
 
@@ -254,6 +260,11 @@
     pauseEnforceUntil = Date.now() + 1500;
     video.addEventListener("play", reassertPause, true);
     video.addEventListener("playing", reassertPause, true);
+    // A genuine user gesture should win over enforcement: stop resisting as
+    // soon as the user clicks/taps or presses a key (other than our own P,
+    // which is handled in onKeyDown before this fires).
+    globalThis.addEventListener("pointerdown", onUserGestureDuringPause, true);
+    globalThis.addEventListener("keydown", onUserGestureDuringPause, true);
     video.pause();
     // Belt-and-suspenders: also poll briefly, in case a resume path fires no
     // play/playing event we caught.
@@ -274,8 +285,24 @@
     if (!pausedVideo) return;
     pausedVideo.removeEventListener("play", reassertPause, true);
     pausedVideo.removeEventListener("playing", reassertPause, true);
+    globalThis.removeEventListener(
+      "pointerdown",
+      onUserGestureDuringPause,
+      true,
+    );
+    globalThis.removeEventListener("keydown", onUserGestureDuringPause, true);
     pausedVideo = null;
     pauseEnforceUntil = 0;
+  }
+
+  /**
+   * Any deliberate user interaction during the enforcement window means the
+   * user is taking over (e.g. clicking play). Our own P press is handled and
+   * stopped earlier in onKeyDown, so it won't reach this. Release on the next
+   * tick so the user's resume isn't immediately re-paused.
+   */
+  function onUserGestureDuringPause() {
+    setTimeout(releasePause, 0);
   }
 
   /** Re-pause the video YouTube is trying to auto-resume, within the window. */
