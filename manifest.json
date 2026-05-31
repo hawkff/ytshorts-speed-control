@@ -19,9 +19,6 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "background": {
-    "service_worker": "src/background.js"
-  },
   "content_scripts": [
     {
       "matches": ["https://www.youtube.com/*", "https://m.youtube.com/*"],
@@ -29,25 +26,5 @@
       "run_at": "document_idle",
       "all_frames": false
     }
-  ],
-  "commands": {
-    "speed-up": {
-      "suggested_key": {
-        "default": "Alt+Shift+Period"
-      },
-      "description": "Increase Shorts playback speed"
-    },
-    "speed-down": {
-      "suggested_key": {
-        "default": "Alt+Shift+Comma"
-      },
-      "description": "Decrease Shorts playback speed"
-    },
-    "speed-reset": {
-      "suggested_key": {
-        "default": "Alt+Shift+0"
-      },
-      "description": "Reset Shorts playback speed to 1x"
-    }
-  }
+  ]
 }
