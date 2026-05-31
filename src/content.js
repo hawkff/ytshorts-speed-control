@@ -224,16 +224,26 @@
   /**
    * Toggle play/pause on the video the user is actually watching.
    *
-   * Bound to P, which YouTube Shorts lacks. Two subtleties this handles:
-   *  - On Shorts several recycled <video> nodes exist; we act on the one most
-   *    visible in the viewport, not a possibly-stale managedVideo.
-   *  - After we pause, YouTube's player keeps trying to resume. We hold a
-   *    "user paused" intent and re-pause until the user plays again or leaves.
+   * Bound to P, which YouTube Shorts lacks.
+   *
+   * The reliable way to pause is to drive YouTube's own player rather than
+   * fight it: setting video.pause() directly makes YouTube's state machine
+   * (especially on /watch) re-assert playback, so the pause only lasts a
+   * split second. Instead we click YouTube's native play/pause button, which
+   * keeps the player's internal state in sync and makes the pause stick. If no
+   * native control is found (some Shorts layouts), we fall back to toggling the
+   * media element with a short re-pause enforcement window.
    */
   function togglePlayPause() {
     const video = getVisibleVideo();
     if (!video) return;
+    const willPause = !video.paused;
     try {
+      if (clickNativePlayButton(video)) {
+        showStatusIndicator(willPause ? "\u23F8 Pause" : "\u25B6 Play");
+        return;
+      }
+      // Fallback: drive the media element directly.
       if (video.paused) {
         userPlay(video);
         showStatusIndicator("\u25B6 Play");
@@ -244,6 +254,30 @@
     } catch (err) {
       console.error("[YTShortsSpeed] play/pause toggle failed", err);
     }
+  }
+
+  /**
+   * Click YouTube's native play/pause button for the player that owns `video`.
+   * Returns true if a control was found and clicked. Using the real control
+   * keeps YouTube's player state consistent so the pause sticks.
+   *
+   * Only a button scoped to the video's own player container is used, so we
+   * never click a different (recycled/offscreen) player's control.
+   * @param {HTMLVideoElement} video
+   * @returns {boolean}
+   */
+  function clickNativePlayButton(video) {
+    const container = video.closest(
+      ".html5-video-player, ytd-player, #shorts-player, ytd-reel-video-renderer",
+    );
+    if (!container) return false; // no recognizable player; use fallback
+    const btn = container.querySelector(".ytp-play-button");
+    if (!(btn instanceof HTMLElement)) return false;
+    // Ignore a button with no layout box (hidden / detached players).
+    const r = btn.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return false;
+    btn.click();
+    return true;
   }
 
   // Pause enforcement. After the user pauses with P, YouTube's player tries to
