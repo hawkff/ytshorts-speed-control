@@ -496,9 +496,13 @@
         }
         if (changes[SETTINGS_KEY]) {
           const incoming = changes[SETTINGS_KEY].newValue;
+          // adoptSettings does NOT re-persist, avoiding a storage write loop.
+          // If the key was removed (newValue undefined), fall back to defaults
+          // so stale opt-in state doesn't linger until reload.
           if (incoming && typeof incoming === "object") {
-            // adoptSettings does NOT re-persist, avoiding a storage write loop.
             adoptSettings(incoming);
+          } else {
+            adoptSettings({});
           }
         }
       });
