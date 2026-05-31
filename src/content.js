@@ -30,9 +30,20 @@
   let desiredSpeed = Speed.DEFAULT_SPEED;
   /** The video we are currently managing, if any. */
   let managedVideo = null;
-  /** Guard so our own playbackRate writes don't trigger reapply loops. */
-  let applyingRate = false;
   let indicatorTimer = null;
+
+  /** Tolerance for comparing playback rates (browsers may round slightly). */
+  const RATE_EPSILON = 1e-3;
+
+  /**
+   * Whether two playback rates are effectively equal.
+   * @param {number} a
+   * @param {number} b
+   * @returns {boolean}
+   */
+  function ratesEqual(a, b) {
+    return Math.abs(a - b) < RATE_EPSILON;
+  }
 
   /** True only on actual Shorts pages (/shorts/...). */
   function isShortsPage() {
@@ -57,23 +68,24 @@
   }
 
   /**
-   * Apply desiredSpeed to a video element, guarding against feedback loops.
+   * Apply desiredSpeed to a video element.
+   *
+   * No timing-based "is this our own write" guard is needed: the decision is
+   * deterministic. We only write when the current rate differs from the
+   * target, and onRateChange only reasserts when the rate drifts away from the
+   * target. Because clampSpeed keeps targets inside the browser's supported
+   * rate range, a written value reads back equal to the target, so the
+   * ratesEqual guard reliably stops any feedback loop.
    * @param {HTMLVideoElement | null} video
    */
   function applySpeedTo(video) {
     if (!video) return;
     const target = Speed.clampSpeed(desiredSpeed);
-    if (video.playbackRate === target) return;
-    applyingRate = true;
+    if (ratesEqual(video.playbackRate, target)) return;
     try {
       video.playbackRate = target;
     } catch (err) {
       console.error("[YTShortsSpeed] failed to set playbackRate", err);
-    } finally {
-      // Release the guard after the synchronous ratechange has a chance to fire.
-      setTimeout(() => {
-        applyingRate = false;
-      }, 0);
     }
   }
 
@@ -109,8 +121,12 @@
   }
 
   function onRateChange() {
-    if (applyingRate) return; // our own write
-    // YouTube (or the user via native UI) changed the rate; reassert ours.
+    if (!managedVideo) return;
+    const target = Speed.clampSpeed(desiredSpeed);
+    // If the rate already matches our target, this event came from our own
+    // write (or is a no-op) and needs no action. Otherwise YouTube or the user
+    // changed it, so reassert our chosen speed.
+    if (ratesEqual(managedVideo.playbackRate, target)) return;
     applySpeedTo(managedVideo);
   }
 
