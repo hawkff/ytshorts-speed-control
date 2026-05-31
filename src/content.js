@@ -180,6 +180,30 @@
   }
 
   /**
+   * Toggle play/pause on the active video. Mirrors YouTube's own behavior but
+   * lets us bind it to a single key (P) on Shorts, where YouTube has no such
+   * shortcut. Shows a transient indicator with the new state.
+   */
+  function togglePlayPause() {
+    const video = managedVideo || findActiveVideo();
+    if (!video) return;
+    try {
+      if (video.paused) {
+        // play() returns a promise that can reject (e.g. autoplay policy);
+        // swallow it so we don't throw an unhandled rejection.
+        const p = video.play();
+        if (p && typeof p.catch === "function") p.catch(() => {});
+        showStatusIndicator("\u25B6 Play");
+      } else {
+        video.pause();
+        showStatusIndicator("\u23F8 Pause");
+      }
+    } catch (err) {
+      console.error("[YTShortsSpeed] play/pause toggle failed", err);
+    }
+  }
+
+  /**
    * Coerce arbitrary input into a valid settings object (only known keys,
    * correct types), merged over the current settings.
    * @param {Record<string, unknown>} incoming
@@ -245,6 +269,15 @@
 
   /** Render a transient speed badge over the player. */
   function showIndicator(value) {
+    showStatusIndicator(`\u26A1 ${Speed.formatSpeed(value)}`);
+  }
+
+  /**
+   * Render a transient text badge over the player (used for speed changes and
+   * play/pause). Reuses a single element and resets its fade timer.
+   * @param {string} text
+   */
+  function showStatusIndicator(text) {
     if (!document.body) return;
     let el = document.getElementById(INDICATOR_ID);
     if (!el) {
@@ -269,7 +302,7 @@
       });
       document.body.appendChild(el);
     }
-    el.textContent = `\u26A1 ${Speed.formatSpeed(value)}`;
+    el.textContent = text;
     // Force reflow so the opacity transition runs on repeated triggers.
     void el.offsetWidth;
     el.style.opacity = "1";
@@ -344,6 +377,7 @@
   //   ]          -> speed up
   //   [          -> speed down
   //   Backspace  -> reset to 1x
+  //   P          -> toggle pause/play
 
   /**
    * Whether the event target is a place where the user is typing, so we must
@@ -378,6 +412,8 @@
       action = "down";
     } else if (e.key === "Backspace" || e.code === "Backspace") {
       action = "reset";
+    } else if (e.key === "p" || e.key === "P" || e.code === "KeyP") {
+      action = "pause";
     } else {
       return; // not ours; let the page handle it
     }
@@ -397,6 +433,8 @@
       return;
     }
     if (action === "reset" && (e.ctrlKey || e.metaKey || e.altKey)) return;
+    // P is a plain shortcut; never hijack Cmd/Ctrl+P (print) etc.
+    if (action === "pause" && (e.ctrlKey || e.metaKey || e.altKey)) return;
 
     switch (action) {
       case "up":
@@ -407,6 +445,9 @@
         break;
       case "reset":
         setSpeed(Speed.DEFAULT_SPEED);
+        break;
+      case "pause":
+        togglePlayPause();
         break;
     }
     // We acted: stop YouTube from also reacting (e.g. Backspace = back nav).

@@ -23,6 +23,7 @@ keybindings. Built for Shorts, with optional support for regular videos.
 | `]`         | Increase speed by 0.25x |
 | `[`         | Decrease speed by 0.25x |
 | `Backspace` | Reset speed to 1.0x     |
+| `P`         | Pause / play            |
 
 ## Local install / testing
 
@@ -44,7 +45,11 @@ keybindings. Built for Shorts, with optional support for regular videos.
 
 ## Examples
 
+The popup on a YouTube page, and on a non-YouTube page (where it prompts you to
+open YouTube):
+
 ![Extension popup](docs/examples/popup-example.png)
+![Popup on a non-YouTube page](docs/examples/example-on-non-yt-webpage.png)
 
 ## Development
 
