@@ -186,7 +186,7 @@
     }, INDICATOR_TIMEOUT_MS);
   }
 
-  // ---- Message handling (popup + background) ----------------------------
+  // ---- Message handling (popup) -----------------------------------------
 
   function handleMessage(msg, _sender, sendResponse) {
     if (!msg || typeof msg.type !== "string") return undefined;
@@ -227,6 +227,56 @@
       default:
         return undefined;
     }
+  }
+
+  // ---- Keyboard shortcuts ----------------------------------------------
+  //
+  // Chrome's manifest `commands` API can't bind bare keys (no modifier), so
+  // single-key shortcuts are handled here, the same way YouTube handles its
+  // own j/k/l keys. Active only on Shorts pages.
+  //
+  //   ]          -> speed up
+  //   [          -> speed down
+  //   Backspace  -> reset to 1x
+
+  /**
+   * Whether the event target is a place where the user is typing, so we must
+   * not hijack the key (search box, comment field, contenteditable, etc.).
+   * @param {EventTarget | null} target
+   * @returns {boolean}
+   */
+  function isEditableTarget(target) {
+    if (!(target instanceof Element)) return false;
+    const tag = target.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+    if (target.isContentEditable) return true;
+    // YouTube's search/comment boxes use role=textbox on a content-editable.
+    return target.getAttribute("role") === "textbox";
+  }
+
+  function onKeyDown(e) {
+    if (!isShortsPage()) return;
+    // Ignore combos with modifiers and repeats so we don't fight YouTube or
+    // browser shortcuts, and don't steal keys while the user is typing.
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.defaultPrevented || isEditableTarget(e.target)) return;
+
+    switch (e.key) {
+      case "]":
+        setSpeed(Speed.adjustSpeed(desiredSpeed, KEYBOARD_STEP));
+        break;
+      case "[":
+        setSpeed(Speed.adjustSpeed(desiredSpeed, -KEYBOARD_STEP));
+        break;
+      case "Backspace":
+        setSpeed(Speed.DEFAULT_SPEED);
+        break;
+      default:
+        return; // not ours; let the page handle it
+    }
+    // We acted: stop YouTube from also reacting (e.g. Backspace = back nav).
+    e.preventDefault();
+    e.stopPropagation();
   }
 
   // ---- SPA navigation + DOM churn handling ------------------------------
@@ -295,6 +345,9 @@
     } catch (err) {
       console.error("[YTShortsSpeed] cannot register message listener", err);
     }
+
+    // Capture-phase so our keys run before YouTube's own keyboard handlers.
+    globalThis.addEventListener("keydown", onKeyDown, true);
 
     // React to changes from the popup made while we're alive.
     try {
