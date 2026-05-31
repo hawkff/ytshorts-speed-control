@@ -21,9 +21,14 @@
     customForm: document.getElementById("custom-form"),
     customInput: document.getElementById("custom-input"),
     reset: document.getElementById("reset"),
+    enableOnWatch: document.getElementById("enable-on-watch"),
   };
 
+  /** Mirror of content.js DEFAULT_SETTINGS; keep the two in sync. */
+  const DEFAULT_SETTINGS = { enableOnWatch: false };
+
   let currentSpeed = Speed.DEFAULT_SPEED;
+  let settings = { ...DEFAULT_SETTINGS };
 
   /** Query the active tab; returns the tab or null. */
   async function getActiveTab() {
@@ -105,6 +110,32 @@
     return true;
   }
 
+  /** Coerce stored/incoming settings into a known-shape object. */
+  function normalizeSettings(incoming) {
+    const next = { ...DEFAULT_SETTINGS };
+    if (incoming && typeof incoming.enableOnWatch === "boolean") {
+      next.enableOnWatch = incoming.enableOnWatch;
+    }
+    return next;
+  }
+
+  /** Reflect current settings onto the controls. */
+  function renderSettings() {
+    els.enableOnWatch.checked = settings.enableOnWatch;
+  }
+
+  /** Persist settings and notify the page so it applies them live. */
+  async function applySettings(next) {
+    settings = normalizeSettings(next);
+    renderSettings();
+    try {
+      await chrome.storage.local.set({ settings: { ...settings } });
+    } catch (_err) {
+      // Non-fatal: the message below may still apply it live.
+    }
+    await sendToTab({ type: "SET_SETTINGS", settings: { ...settings } });
+  }
+
   function buildPresets() {
     Speed.SPEED_PRESETS.forEach((value) => {
       const btn = document.createElement("button");
@@ -136,6 +167,10 @@
     });
 
     els.reset.addEventListener("click", () => applySpeed(Speed.DEFAULT_SPEED));
+
+    els.enableOnWatch.addEventListener("change", () => {
+      applySettings({ enableOnWatch: els.enableOnWatch.checked });
+    });
   }
 
   /** Determine the starting speed and page status on open. */
@@ -149,26 +184,37 @@
 
     let speed = Speed.DEFAULT_SPEED;
     try {
-      const data = await chrome.storage.local.get("speed");
+      const data = await chrome.storage.local.get(["speed", "settings"]);
       const stored = Speed.parseSpeed(data && data.speed);
       if (stored !== null) speed = stored;
+      settings = normalizeSettings(data && data.settings);
     } catch (_err) {
-      // ignore; keep default
+      // ignore; keep defaults
     }
 
     const state = await sendToTab({ type: "GET_STATE" });
     if (state && Speed.isValidSpeed(state.speed)) {
       speed = state.speed;
     }
+    if (state && state.settings) {
+      settings = normalizeSettings(state.settings);
+    }
 
     render(speed);
+    renderSettings();
 
     if (!onYouTube) {
       setStatus("Open a YouTube tab to control playback.", true);
-    } else if (state && !state.isShorts) {
-      setStatus("Not on a Short. Speed will apply when you open one.", false);
     } else if (state && state.isShorts) {
       setStatus(`Playing at ${Speed.formatSpeed(speed)}.`, false);
+    } else if (state && state.isWatch) {
+      if (settings.enableOnWatch) {
+        setStatus(`Playing at ${Speed.formatSpeed(speed)}.`, false);
+      } else {
+        setStatus("Enable below to control regular videos.", false);
+      }
+    } else if (state) {
+      setStatus("Speed applies on Shorts (and videos, if enabled).", false);
     } else {
       setStatus("Ready.", false);
     }
