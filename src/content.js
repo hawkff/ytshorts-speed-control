@@ -227,12 +227,13 @@
    * Bound to P, which YouTube Shorts lacks.
    *
    * The reliable way to pause is to drive YouTube's own player rather than
-   * fight it: setting video.pause() directly makes YouTube's state machine
+   * fight it: setting video.pause() directly can make YouTube's state machine
    * (especially on /watch) re-assert playback, so the pause only lasts a
    * split second. Instead we click YouTube's native play/pause button, which
-   * keeps the player's internal state in sync and makes the pause stick. If no
-   * native control is found (some Shorts layouts), we fall back to toggling the
-   * media element with a short re-pause enforcement window.
+   * keeps the player's internal state in sync. When pausing, we also arm a
+   * short re-pause enforcement window to catch YouTube's immediate auto-resume
+   * retries. If no native control is found (some Shorts layouts), we fall back
+   * to toggling the media element with the same enforcement window.
    */
   function togglePlayPause() {
     const video = getVisibleVideo();
@@ -240,6 +241,11 @@
     const willPause = !video.paused;
     try {
       if (clickNativePlayButton(video)) {
+        if (willPause) {
+          userPause(video);
+        } else {
+          releasePause();
+        }
         showStatusIndicator(willPause ? "\u23F8 Pause" : "\u25B6 Play");
         return;
       }
@@ -608,6 +614,13 @@
     // P is a plain shortcut; never hijack Cmd/Ctrl+P (print) etc.
     if (action === "pause" && (e.ctrlKey || e.metaKey || e.altKey)) return;
 
+    // We acted: stop YouTube from also reacting before we perform side effects
+    // like clicking its native play/pause button.
+    // stopImmediatePropagation also blocks other listeners on this same target.
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    e.stopPropagation();
+
     switch (action) {
       case "up":
         setSpeed(Speed.adjustSpeed(desiredSpeed, KEYBOARD_STEP));
@@ -622,11 +635,6 @@
         togglePlayPause();
         break;
     }
-    // We acted: stop YouTube from also reacting (e.g. Backspace = back nav).
-    // stopImmediatePropagation also blocks other listeners on this same target.
-    e.preventDefault();
-    e.stopImmediatePropagation();
-    e.stopPropagation();
   }
 
   // ---- SPA navigation + DOM churn handling ------------------------------
