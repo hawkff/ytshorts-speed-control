@@ -301,10 +301,15 @@
     video.addEventListener("play", reassertPause, true);
     video.addEventListener("playing", reassertPause, true);
     // A genuine user gesture should win over enforcement: stop resisting as
-    // soon as the user clicks/taps or presses a key (other than our own P,
-    // which is handled in onKeyDown before this fires).
+    // soon as the user clicks/taps or presses a key. The key listener is
+    // registered after the current dispatch so the P press that requested the
+    // pause cannot immediately cancel its own enforcement window.
     globalThis.addEventListener("pointerdown", onUserGestureDuringPause, true);
-    globalThis.addEventListener("keydown", onUserGestureDuringPause, true);
+    setTimeout(() => {
+      if (pausedVideo === video) {
+        globalThis.addEventListener("keydown", onUserGestureDuringPause, true);
+      }
+    }, 0);
     video.pause();
     // Belt-and-suspenders: also poll briefly, in case a resume path fires no
     // play/playing event we caught.
@@ -337,12 +342,24 @@
 
   /**
    * Any deliberate user interaction during the enforcement window means the
-   * user is taking over (e.g. clicking play). Our own P press is handled and
-   * stopped earlier in onKeyDown, so it won't reach this. Release on the next
-   * tick so the user's resume isn't immediately re-paused.
+   * user is taking over (e.g. clicking play). If the current shortcut event ever
+   * reaches this listener, ignore it so P pause cannot self-cancel. Release on
+   * the next tick so the user's resume isn't immediately re-paused.
+   * @param {Event} event
    */
-  function onUserGestureDuringPause() {
+  function onUserGestureDuringPause(event) {
+    if (isPlainPauseShortcut(event)) return;
     setTimeout(releasePause, 0);
+  }
+
+  /**
+   * @param {Event} event
+   * @returns {boolean}
+   */
+  function isPlainPauseShortcut(event) {
+    if (!(event instanceof KeyboardEvent)) return false;
+    if (event.ctrlKey || event.metaKey || event.altKey) return false;
+    return event.key === "p" || event.key === "P" || event.code === "KeyP";
   }
 
   /** Re-pause the video YouTube is trying to auto-resume, within the window. */
