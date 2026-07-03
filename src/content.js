@@ -151,6 +151,14 @@
    */
   function applySpeedTo(video) {
     if (!video) return;
+    // Never write playbackRate into a paused video. Rates above YouTube's
+    // native 2x maximum make its player re-sync (reset the rate and call
+    // play()) when written while paused, so each rewrite from onRateChange /
+    // the 1s interval provoked another auto-resume until the pause-enforcement
+    // window lost the fight and playback continued on its own. The rate only
+    // matters during playback anyway: onPlay (and the interval) reassert it
+    // the moment the video genuinely resumes.
+    if (video === pausedVideo || video.paused) return;
     const target = Speed.clampSpeed(desiredSpeed);
     if (ratesEqual(video.playbackRate, target)) return;
     try {
