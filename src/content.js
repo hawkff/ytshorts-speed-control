@@ -8,7 +8,7 @@
  *  - Track the currently active <video> element on a Shorts page.
  *  - Apply the user's chosen playback speed and keep re-applying it, because
  *    YouTube resets playbackRate to 1x whenever it swaps to a new Short.
- *  - React to popup/background messages and chrome.storage changes.
+ *  - React to popup messages and extension storage changes.
  *  - Show a brief on-screen indicator when the speed changes.
  *
  * Pure math lives in lib/speed.js (loaded first), exposed as
@@ -24,6 +24,9 @@
     return;
   }
 
+  // Firefox exposes promise-based APIs as `browser`; Chrome uses `chrome`.
+  const extensionApi = globalThis.browser ?? globalThis.chrome;
+
   const STORAGE_KEY = "speed";
   const SETTINGS_KEY = "settings";
   const KEYBOARD_STEP = Speed.KEYBOARD_STEP;
@@ -37,9 +40,9 @@
     enableOnWatch: false,
   });
 
-  /** Current desired speed; mirrors chrome.storage.local[STORAGE_KEY]. */
+  /** Current desired speed; mirrors local extension storage. */
   let desiredSpeed = Speed.DEFAULT_SPEED;
-  /** Current settings; mirrors chrome.storage.local[SETTINGS_KEY]. */
+  /** Current settings; mirrors local extension storage. */
   let settings = { ...DEFAULT_SETTINGS };
   /** The video we are currently managing, if any. */
   let managedVideo = null;
@@ -223,7 +226,11 @@
     reapply();
     if (showOverlay) showIndicator(desiredSpeed);
     try {
-      chrome.storage.local.set({ [STORAGE_KEY]: desiredSpeed });
+      extensionApi.storage.local
+        .set({ [STORAGE_KEY]: desiredSpeed })
+        .catch((err) => {
+          console.error("[YTShortsSpeed] storage.set failed", err);
+        });
     } catch (err) {
       console.error("[YTShortsSpeed] storage.set failed", err);
     }
@@ -463,7 +470,11 @@
     const wasActive = isActivePage();
     settings = normalizeSettings(incoming);
     try {
-      chrome.storage.local.set({ [SETTINGS_KEY]: { ...settings } });
+      extensionApi.storage.local
+        .set({ [SETTINGS_KEY]: { ...settings } })
+        .catch((err) => {
+          console.error("[YTShortsSpeed] settings.set failed", err);
+        });
     } catch (err) {
       console.error("[YTShortsSpeed] settings.set failed", err);
     }
@@ -724,16 +735,16 @@
 
   // ---- Init -------------------------------------------------------------
 
-  function init() {
+  async function init() {
     try {
-      chrome.runtime.onMessage.addListener(handleMessage);
+      extensionApi.runtime.onMessage.addListener(handleMessage);
     } catch (err) {
       console.error("[YTShortsSpeed] cannot register message listener", err);
     }
 
     // React to changes from the popup made while we're alive.
     try {
-      chrome.storage.onChanged.addListener((changes, area) => {
+      extensionApi.storage.onChanged.addListener((changes, area) => {
         if (area !== "local") return;
         if (changes[STORAGE_KEY]) {
           const next = Speed.parseSpeed(changes[STORAGE_KEY].newValue);
@@ -760,21 +771,22 @@
 
     // Load the persisted speed + settings, then start managing.
     try {
-      chrome.storage.local.get([STORAGE_KEY, SETTINGS_KEY], (data) => {
-        const stored = Speed.parseSpeed(data && data[STORAGE_KEY]);
-        if (stored !== null) desiredSpeed = stored;
-        const storedSettings = data && data[SETTINGS_KEY];
-        if (storedSettings && typeof storedSettings === "object") {
-          settings = normalizeSettings(storedSettings);
-        }
-        startObservers();
-        reapply();
-      });
+      const data = await extensionApi.storage.local.get([
+        STORAGE_KEY,
+        SETTINGS_KEY,
+      ]);
+      const stored = Speed.parseSpeed(data && data[STORAGE_KEY]);
+      if (stored !== null) desiredSpeed = stored;
+      const storedSettings = data && data[SETTINGS_KEY];
+      if (storedSettings && typeof storedSettings === "object") {
+        settings = normalizeSettings(storedSettings);
+      }
     } catch (err) {
       console.error("[YTShortsSpeed] storage.get failed; using default", err);
-      startObservers();
-      reapply();
     }
+
+    startObservers();
+    reapply();
   }
 
   // Register the keyboard listener synchronously at document_start, BEFORE

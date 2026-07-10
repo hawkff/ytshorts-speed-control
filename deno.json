@@ -2,14 +2,23 @@
   "license": "AGPL-3.0-or-later",
   "tasks": {
     "test": "deno test",
-    "check": "deno fmt --check && deno lint && deno test"
+    "check": "deno fmt --check && deno lint && deno test",
+    "package": "deno run --allow-read=. --allow-write=dist,.package-tmp --allow-run=zip scripts/package.ts"
   },
   "fmt": {
-    "include": ["lib/", "src/", "tests/", "deno.json"],
+    "include": [
+      "lib/",
+      "src/",
+      "scripts/",
+      "tests/",
+      "deno.json",
+      "manifest.json",
+      "manifest.firefox.json"
+    ],
     "exclude": ["icons/", ".agents/", "**/._*"]
   },
   "lint": {
-    "include": ["lib/", "src/", "tests/"],
+    "include": ["lib/", "src/", "scripts/", "tests/"],
     "exclude": ["icons/", ".agents/", "**/._*"],
     "rules": {
       "tags": ["recommended"]
@@ -20,6 +29,7 @@
     "exclude": ["**/._*"]
   },
   "imports": {
-    "@std/assert": "jsr:@std/assert@1"
+    "@std/assert": "jsr:@std/assert@1",
+    "@std/path": "jsr:@std/path@^1.1.6"
   }
 }

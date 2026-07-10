@@ -1,6 +1,6 @@
 # YT Shorts Speed Control
 
-A Chrome extension to control YouTube playback speed with mpv-like
+A Chrome and Firefox extension to control YouTube playback speed with mpv-like
 keybindings. Built for Shorts, with optional support for regular videos.
 
 ## Features
@@ -27,12 +27,27 @@ keybindings. Built for Shorts, with optional support for regular videos.
 
 ## Local install / testing
 
-1. Clone this repo
-2. Open `chrome://extensions`
-3. Enable **Developer mode** (top right)
-4. Click **Load unpacked** and select the project folder
+### Chrome / Chromium
+
+1. Clone this repo.
+2. Open `chrome://extensions`.
+3. Enable **Developer mode** (top right).
+4. Click **Load unpacked** and select the project folder.
 5. Open a YouTube Short and set the speed from the popup or with the keyboard
-   shortcuts
+   shortcuts.
+
+### Firefox desktop 140 or newer
+
+1. Clone this repo and run `deno task package`.
+2. Unzip `dist/ytshorts-speed-control-v<version>-firefox.zip`.
+3. Open `about:debugging#/runtime/this-firefox`.
+4. Click **Load Temporary Add-on**.
+5. Select `manifest.json` in the unzipped folder.
+6. Open a YouTube Short and set the speed from the popup or with the keyboard
+   shortcuts.
+
+Firefox removes temporary add-ons when the browser closes. The Firefox ZIP in
+GitHub Releases is unsigned; a permanent install requires Mozilla signing.
 
 ## Usage
 
@@ -57,14 +72,20 @@ This project uses [Deno](https://deno.com) for formatting, linting, and tests
 (no `node_modules`, no build step).
 
 ```bash
-deno task test     # run unit tests
-deno task check    # fmt --check + lint + test
-deno fmt           # format
-deno lint          # lint
+deno task test      # run unit tests
+deno task check     # fmt --check + lint + test
+deno task package   # create Chrome and Firefox ZIPs in dist/
+deno fmt            # format
+deno lint           # lint
 ```
 
+`manifest.json` targets Chrome. `manifest.firefox.json` adds Firefox signing,
+minimum-version, and no-data metadata. The packaging task uses the `zip`
+command and puts the correct manifest at the root of each archive.
+
 The helpers in `lib/speed.js` are covered by unit tests in
-`tests/speed_test.js`.
+`tests/speed_test.js`. Manifest tests keep the shared Chrome and Firefox fields
+in sync.
 
 ## Privacy and permissions
 

@@ -4,14 +4,15 @@
  * Copyright (C) 2026 hawkff
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * Talks to the active tab's content script via chrome.tabs.sendMessage and
- * persists the chosen speed through chrome.storage.local (the content script
+ * Talks to the active tab's content script through the WebExtension API and
+ * persists the chosen speed in local extension storage (the content script
  * also listens to storage changes, so the popup and page stay in sync).
  */
 (function () {
   "use strict";
 
   const Speed = globalThis.YTShortsSpeed;
+  const extensionApi = globalThis.browser ?? globalThis.chrome;
 
   const els = {
     status: document.getElementById("status"),
@@ -36,7 +37,7 @@
   /** Query the active tab; returns the tab or null. */
   async function getActiveTab() {
     try {
-      const tabs = await chrome.tabs.query({
+      const tabs = await extensionApi.tabs.query({
         active: true,
         currentWindow: true,
       });
@@ -58,7 +59,7 @@
     const tab = await getActiveTab();
     if (!tab || typeof tab.id !== "number") return null;
     try {
-      return await chrome.tabs.sendMessage(tab.id, message);
+      return await extensionApi.tabs.sendMessage(tab.id, message);
     } catch (_err) {
       return null;
     }
@@ -102,7 +103,7 @@
     render(parsed);
     // Persist first so the value survives even if no content script is present.
     try {
-      await chrome.storage.local.set({ speed: parsed });
+      await extensionApi.storage.local.set({ speed: parsed });
     } catch (_err) {
       // Non-fatal: the message below may still apply it live.
     }
@@ -145,7 +146,7 @@
     settings = normalizeSettings(next);
     renderSettings();
     try {
-      await chrome.storage.local.set({ settings: { ...settings } });
+      await extensionApi.storage.local.set({ settings: { ...settings } });
     } catch (_err) {
       // Non-fatal: the message below may still apply it live.
     }
@@ -201,7 +202,10 @@
 
     let speed = Speed.DEFAULT_SPEED;
     try {
-      const data = await chrome.storage.local.get(["speed", "settings"]);
+      const data = await extensionApi.storage.local.get([
+        "speed",
+        "settings",
+      ]);
       const stored = Speed.parseSpeed(data && data.speed);
       if (stored !== null) speed = stored;
       settings = normalizeSettings(data && data.settings);

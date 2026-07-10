@@ -7,3 +7,7 @@
 .agents*
 skills-lock.json
 
+# Release artifacts
+/dist/
+/.package-tmp/
+
