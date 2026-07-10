@@ -2,7 +2,7 @@
   "license": "AGPL-3.0-or-later",
   "tasks": {
     "test": "deno test",
-    "check": "deno fmt --check && deno lint && deno test",
+    "check": "deno fmt --check && deno lint && deno check scripts/package.ts && deno test",
     "package": "deno run --allow-read=. --allow-write=dist,.package-tmp --allow-run=zip scripts/package.ts"
   },
   "fmt": {

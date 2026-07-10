@@ -44,6 +44,16 @@
   let desiredSpeed = Speed.DEFAULT_SPEED;
   /** Current settings; mirrors local extension storage. */
   let settings = { ...DEFAULT_SETTINGS };
+  /**
+   * Revision counters for live state. Every accepted external mutation of
+   * speed/settings (popup message, keyboard, storage event) bumps its counter,
+   * even when the incoming value equals the current one. Init captures both
+   * before its awaited storage read and only adopts the snapshot for keys
+   * whose revision is unchanged, so an older snapshot never overwrites newer
+   * live state.
+   */
+  let speedRevision = 0;
+  let settingsRevision = 0;
   /** The video we are currently managing, if any. */
   let managedVideo = null;
   let indicatorTimer = null;
@@ -84,61 +94,55 @@
 
   /**
    * Find the most relevant video element. On Shorts there can be several
-   * recycled <video> nodes; prefer one that is playing, else the first that
-   * has a source, else the first present.
+   * recycled <video> nodes; prefer the largest meaningfully visible one. When
+   * no video has a useful layout box (for example in a hidden document), fall
+   * back to one that is playing, then one with a source, then the first present.
    * @returns {HTMLVideoElement | null}
    */
   function findActiveVideo() {
     const videos = Array.from(document.querySelectorAll("video"));
     if (videos.length === 0) return null;
-    const playing = videos.find((v) =>
-      !v.paused && !v.ended && v.readyState > 2
+
+    let best = null;
+    let bestArea = 0;
+    for (const video of videos) {
+      const rect = video.getBoundingClientRect();
+      const area = viewportVisibleArea(rect);
+      const boxArea = rect.width * rect.height;
+      // Require at least ~35% of the element to be on screen to count as the
+      // one being watched; this rejects tiny slivers peeking into the viewport.
+      if (boxArea <= 0 || area / boxArea < 0.35 || area <= bestArea) continue;
+      bestArea = area;
+      best = video;
+    }
+    if (best) return best;
+
+    const playing = videos.find((video) =>
+      !video.paused && !video.ended && video.readyState > 2
     );
     if (playing) return playing;
-    const withSrc = videos.find((v) => v.currentSrc || v.src);
+    const withSrc = videos.find((video) => video.currentSrc || video.src);
     return withSrc || videos[0];
   }
 
   /**
-   * Area of a video's intersection with the viewport. Used to find the Short
-   * the user is actually looking at when several recycled <video> nodes exist.
-   * @param {HTMLVideoElement} video
+   * Area of a rectangle's intersection with the viewport.
+   * @param {DOMRect} rect
    * @returns {number}
    */
-  function viewportVisibleArea(video) {
-    const r = video.getBoundingClientRect();
-    if (r.width <= 0 || r.height <= 0) return 0;
+  function viewportVisibleArea(rect) {
+    if (rect.width <= 0 || rect.height <= 0) return 0;
     const vw = globalThis.innerWidth || document.documentElement.clientWidth;
     const vh = globalThis.innerHeight || document.documentElement.clientHeight;
-    const w = Math.max(0, Math.min(r.right, vw) - Math.max(r.left, 0));
-    const h = Math.max(0, Math.min(r.bottom, vh) - Math.max(r.top, 0));
+    const w = Math.max(
+      0,
+      Math.min(rect.right, vw) - Math.max(rect.left, 0),
+    );
+    const h = Math.max(
+      0,
+      Math.min(rect.bottom, vh) - Math.max(rect.top, 0),
+    );
     return w * h;
-  }
-
-  /**
-   * The video the user is most likely watching: the one with the largest
-   * visible area in the viewport, but only if it covers a meaningful share of
-   * its own box (so a sliver-sized recycled node or mini-player can't win).
-   * Falls back to findActiveVideo() when nothing is meaningfully on screen.
-   * @returns {HTMLVideoElement | null}
-   */
-  function getVisibleVideo() {
-    const videos = Array.from(document.querySelectorAll("video"));
-    if (videos.length === 0) return null;
-    let best = null;
-    let bestArea = 0;
-    for (const v of videos) {
-      const area = viewportVisibleArea(v);
-      if (area <= bestArea) continue;
-      // Require at least ~35% of the element to be on screen to count as the
-      // one being watched; this rejects tiny slivers peeking into the viewport.
-      const r = v.getBoundingClientRect();
-      const boxArea = r.width * r.height;
-      if (boxArea <= 0 || area / boxArea < 0.35) continue;
-      bestArea = area;
-      best = v;
-    }
-    return best || findActiveVideo();
   }
 
   /**
@@ -222,6 +226,7 @@
    * @param {boolean} [showOverlay]
    */
   function setSpeed(value, showOverlay = true) {
+    speedRevision += 1;
     desiredSpeed = Speed.clampSpeed(value);
     reapply();
     if (showOverlay) showIndicator(desiredSpeed);
@@ -251,7 +256,7 @@
    * to toggling the media element with the same enforcement window.
    */
   function togglePlayPause() {
-    const video = getVisibleVideo();
+    const video = findActiveVideo();
     if (!video) return;
     const willPause = !video.paused;
     try {
@@ -307,6 +312,8 @@
   // tap, or any key) immediately ends enforcement so the user can resume.
   let pausedVideo = null;
   let pauseEnforceUntil = 0;
+  /** Handle of the single pending pause-sweep timeout, or null. */
+  let pauseSweepTimer = null;
 
   /** Begin honoring a user-requested pause and resist YouTube re-playing it. */
   function userPause(video) {
@@ -340,8 +347,18 @@
     if (p && typeof p.catch === "function") p.catch(() => {});
   }
 
+  /** Cancel any pending pause-sweep timeout so no stale chain survives. */
+  function cancelPauseSweep() {
+    if (pauseSweepTimer === null) return;
+    clearTimeout(pauseSweepTimer);
+    pauseSweepTimer = null;
+  }
+
   /** Stop enforcing any pause intent. */
   function releasePause() {
+    // Always cancel the sweep, even when no pause state remains: a stale
+    // callback must never outlive its pause intent.
+    cancelPauseSweep();
     if (!pausedVideo) return;
     pausedVideo.removeEventListener("play", reassertPause, true);
     pausedVideo.removeEventListener("playing", reassertPause, true);
@@ -393,9 +410,16 @@
     }
   }
 
-  /** Poll a few times during the enforcement window as a fallback. */
+  /**
+   * Poll a few times during the enforcement window as a fallback. Exactly one
+   * pending sweep timeout exists at a time, owned by pauseSweepTimer, so
+   * releasePause can always cancel the chain.
+   */
   function schedulePauseSweep() {
+    cancelPauseSweep();
     const tick = () => {
+      // This callback has fired; its handle is no longer pending.
+      pauseSweepTimer = null;
       if (!pausedVideo) return;
       if (Date.now() > pauseEnforceUntil) {
         releasePause();
@@ -408,9 +432,9 @@
           // ignore
         }
       }
-      setTimeout(tick, 100);
+      pauseSweepTimer = setTimeout(tick, 100);
     };
-    setTimeout(tick, 100);
+    pauseSweepTimer = setTimeout(tick, 100);
   }
 
   /**
@@ -456,6 +480,7 @@
    * @param {Record<string, unknown>} incoming
    */
   function adoptSettings(incoming) {
+    settingsRevision += 1;
     const wasActive = isActivePage();
     settings = normalizeSettings(incoming);
     reconcileAfterSettings(wasActive);
@@ -467,6 +492,7 @@
    * @param {Record<string, unknown>} incoming
    */
   function applySettings(incoming) {
+    settingsRevision += 1;
     const wasActive = isActivePage();
     settings = normalizeSettings(incoming);
     try {
@@ -698,6 +724,9 @@
     scheduledRaf = true;
     const run = () => {
       scheduledRaf = false;
+      // The page may have become inactive between scheduling and this frame
+      // (SPA navigation); re-check the policy boundary before scanning.
+      if (!isActivePage()) return;
       const active = findActiveVideo();
       if (active && active !== managedVideo) reapply();
     };
@@ -722,6 +751,9 @@
         return;
       }
       // A new video element may have been mounted without a URL change.
+      // Control is inert on inactive routes, so skip the scan entirely there;
+      // URL changes were already handled above, keeping navigation instant.
+      if (!isActivePage()) return;
       // Defer the expensive lookup and coalesce bursts of mutations.
       scheduleVideoCheck();
     });
@@ -748,9 +780,14 @@
         if (area !== "local") return;
         if (changes[STORAGE_KEY]) {
           const next = Speed.parseSpeed(changes[STORAGE_KEY].newValue);
-          if (next !== null && next !== desiredSpeed) {
-            desiredSpeed = next;
-            reapply();
+          if (next !== null) {
+            // Bump even when the value already matches, so a pending init
+            // snapshot knows this newer write supersedes it.
+            speedRevision += 1;
+            if (next !== desiredSpeed) {
+              desiredSpeed = next;
+              reapply();
+            }
           }
         }
         if (changes[SETTINGS_KEY]) {
@@ -769,16 +806,25 @@
       console.error("[YTShortsSpeed] cannot watch storage", err);
     }
 
-    // Load the persisted speed + settings, then start managing.
+    // Load the persisted speed + settings, then start managing. Any live
+    // update that lands while the read is pending bumps a revision counter;
+    // per key, the snapshot is adopted only if its revision is unchanged.
+    const speedRevisionAtRead = speedRevision;
+    const settingsRevisionAtRead = settingsRevision;
     try {
       const data = await extensionApi.storage.local.get([
         STORAGE_KEY,
         SETTINGS_KEY,
       ]);
       const stored = Speed.parseSpeed(data && data[STORAGE_KEY]);
-      if (stored !== null) desiredSpeed = stored;
+      if (stored !== null && speedRevision === speedRevisionAtRead) {
+        desiredSpeed = stored;
+      }
       const storedSettings = data && data[SETTINGS_KEY];
-      if (storedSettings && typeof storedSettings === "object") {
+      if (
+        storedSettings && typeof storedSettings === "object" &&
+        settingsRevision === settingsRevisionAtRead
+      ) {
         settings = normalizeSettings(storedSettings);
       }
     } catch (err) {
