@@ -705,6 +705,9 @@
     scheduledRaf = true;
     const run = () => {
       scheduledRaf = false;
+      // The page may have become inactive between scheduling and this frame
+      // (SPA navigation); re-check the policy boundary before scanning.
+      if (!isActivePage()) return;
       const active = findActiveVideo();
       if (active && active !== managedVideo) reapply();
     };
@@ -729,6 +732,9 @@
         return;
       }
       // A new video element may have been mounted without a URL change.
+      // Control is inert on inactive routes, so skip the scan entirely there;
+      // URL changes were already handled above, keeping navigation instant.
+      if (!isActivePage()) return;
       // Defer the expensive lookup and coalesce bursts of mutations.
       scheduleVideoCheck();
     });

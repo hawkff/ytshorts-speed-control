@@ -9,7 +9,16 @@ const contentScriptImports = [
   () => import("../../src/content.js?content-harness=5"),
   () => import("../../src/content.js?content-harness=6"),
   () => import("../../src/content.js?content-harness=7"),
+  () => import("../../src/content.js?content-harness=8"),
+  () => import("../../src/content.js?content-harness=9"),
+  () => import("../../src/content.js?content-harness=10"),
+  () => import("../../src/content.js?content-harness=11"),
+  () => import("../../src/content.js?content-harness=12"),
+  () => import("../../src/content.js?content-harness=13"),
+  () => import("../../src/content.js?content-harness=14"),
+  () => import("../../src/content.js?content-harness=15"),
 ];
+
 let nextContentScriptImport = 0;
 
 /**
@@ -307,10 +316,11 @@ export async function startContentScript(options = {}) {
   defineGlobal("browser", extensionApi);
   defineGlobal("chrome", undefined);
   defineGlobal("document", document);
-  defineGlobal("location", {
+  const fakeLocation = {
     pathname: options.pathname ?? "/shorts/example",
     href: options.href ?? "https://www.youtube.com/shorts/example",
-  });
+  };
+  defineGlobal("location", fakeLocation);
   defineGlobal("MutationObserver", FakeMutationObserver);
   defineGlobal("Element", FakeElement);
   defineGlobal("HTMLElement", FakeHTMLElement);
@@ -354,6 +364,10 @@ export async function startContentScript(options = {}) {
     get pendingTimers() {
       return [...timers.values()].map(({ kind, delay }) => ({ kind, delay }));
     },
+    get pendingAnimationFrames() {
+      return animationFrames.size;
+    },
+    location: fakeLocation,
     resolveStorageGet(value = stored) {
       if (storageSettled) return;
       storageSettled = true;

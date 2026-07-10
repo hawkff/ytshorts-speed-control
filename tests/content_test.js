@@ -169,6 +169,123 @@ Deno.test("storage speed event equal to the default supersedes the snapshot", as
   }
 });
 
+Deno.test("mutations on an inactive route queue no frame and no scan", async () => {
+  const video = createFakeVideo({
+    paused: false,
+    currentSrc: "https://example.test/home.mp4",
+    rect: { left: 100, top: 100, width: 400, height: 400 },
+  });
+  let env;
+  try {
+    env = await startContentScript({
+      pathname: "/",
+      href: "https://www.youtube.com/",
+      videos: [video],
+      stored: { speed: 2 },
+    });
+    await env.ready;
+
+    const baseline = env.queryCount;
+    env.triggerMutation();
+    env.triggerMutation();
+
+    assertEquals(env.queryCount, baseline);
+    assertEquals(env.pendingAnimationFrames, 0);
+    assertEquals(video.rateWrites, []);
+  } finally {
+    await env?.restore();
+  }
+});
+
+Deno.test("active-page mutation bursts coalesce into one frame and one scan", async () => {
+  const video = createFakeVideo({
+    paused: false,
+    currentSrc: "https://example.test/short.mp4",
+    rect: { left: 100, top: 100, width: 400, height: 400 },
+  });
+  let env;
+  try {
+    env = await startContentScript({
+      videos: [video],
+      stored: { speed: 2 },
+    });
+    await env.ready;
+
+    env.triggerMutation();
+    env.triggerMutation();
+    env.triggerMutation();
+    assertEquals(env.pendingAnimationFrames, 1);
+
+    const baseline = env.queryCount;
+    await env.flushAnimationFrames();
+
+    assertEquals(env.queryCount, baseline + 1);
+  } finally {
+    await env?.restore();
+  }
+});
+
+Deno.test("a queued frame re-checks activity before scanning", async () => {
+  const video = createFakeVideo({
+    paused: false,
+    currentSrc: "https://example.test/short.mp4",
+    rect: { left: 100, top: 100, width: 400, height: 400 },
+  });
+  let env;
+  try {
+    env = await startContentScript({
+      videos: [video],
+      stored: { speed: 2 },
+    });
+    await env.ready;
+
+    env.triggerMutation();
+    assertEquals(env.pendingAnimationFrames, 1);
+
+    // The route becomes inactive before the frame fires, with no further
+    // mutation to re-route through the URL-change branch.
+    env.location.pathname = "/";
+
+    const baseline = env.queryCount;
+    await env.flushAnimationFrames();
+
+    assertEquals(env.queryCount, baseline);
+  } finally {
+    await env?.restore();
+  }
+});
+
+Deno.test("enabling watch via settings applies speed without DOM churn", async () => {
+  const video = createFakeVideo({
+    paused: false,
+    currentSrc: "https://example.test/watch.mp4",
+    rect: { left: 100, top: 100, width: 400, height: 400 },
+  });
+  let env;
+  try {
+    env = await startContentScript({
+      pathname: "/watch",
+      href: "https://www.youtube.com/watch?v=example",
+      videos: [video],
+      stored: { speed: 2, settings: { enableOnWatch: false } },
+    });
+    await env.ready;
+    assertEquals(video.rateWrites, []);
+
+    const response = env.sendMessage({
+      type: "SET_SETTINGS",
+      settings: { enableOnWatch: true },
+    });
+    assertEquals(response.ok, true);
+
+    // No mutation or animation frame needed: activation applies directly.
+    assertEquals(video.playbackRate, 2);
+    assertEquals(video.rateWrites, [2]);
+  } finally {
+    await env?.restore();
+  }
+});
+
 Deno.test("P and speed target the same visible video", async () => {
   const offscreen = createFakeVideo({
     paused: false,
