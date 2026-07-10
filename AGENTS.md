@@ -70,3 +70,11 @@ specifiers.
 - If you added a shipped file: add it to `sharedFiles` in `scripts/package.ts`.
 - If you added tests that start the content script or popup: check the harness
   import pools have enough entries.
+
+## Releasing
+
+1. Bump `version` in BOTH `manifest.json` and `manifest.firefox.json`.
+2. `deno task check`.
+3. Commit, then tag: `git tag v<version> && git push origin v<version>`.
+4. The Release workflow builds the ZIPs and publishes a GitHub Release. The tag
+   must equal the manifest version or the workflow fails.

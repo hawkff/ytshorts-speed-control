@@ -1,0 +1,38 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: write # create the release and upload assets
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.9.2
+      - run: deno task --frozen check
+      - run: deno task package
+      - name: Verify tag matches manifest version
+        run: |
+          version="$(deno eval 'const m = JSON.parse(await Deno.readTextFile("manifest.json")); console.log(m.version);')"
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$version" != "$tag" ]; then
+            echo "Tag v$tag does not match manifest version $version" >&2
+            exit 1
+          fi
+      - name: Create GitHub release with artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.zip \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes
