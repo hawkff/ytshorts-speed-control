@@ -706,7 +706,24 @@
     // New Short: managed video is likely stale, and any pause intent applied
     // to the previous Short must not carry over to the next one.
     releasePause();
-    detach();
+    // Navigating to a route we don't control: hand the video back at 1x, the
+    // same contract reconcileAfterSettings applies when opt-out deactivates a
+    // page. YouTube reuses video elements (miniplayer, prefetched players), so
+    // without this the last speed sticks with no way to change it from the
+    // extension.
+    if (!isActivePage() && managedVideo) {
+      const video = managedVideo;
+      detach();
+      try {
+        if (!ratesEqual(video.playbackRate, Speed.DEFAULT_SPEED)) {
+          video.playbackRate = Speed.DEFAULT_SPEED;
+        }
+      } catch (err) {
+        console.error("[YTShortsSpeed] failed to reset playbackRate", err);
+      }
+    } else {
+      detach();
+    }
     // Give YouTube a tick to mount the new <video>, then reassert.
     setTimeout(reapply, 0);
     setTimeout(reapply, 250);

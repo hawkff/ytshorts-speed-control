@@ -674,3 +674,71 @@ Deno.test("removing the settings key resets opt-in state and releases the video"
     await env?.restore();
   }
 });
+
+Deno.test("navigating to an inactive route resets the managed video to 1x", async () => {
+  const video = createFakeVideo({
+    paused: false,
+    currentSrc: "https://example.test/navigate-away.mp4",
+    rect: { left: 100, top: 100, width: 400, height: 400 },
+    closest: null,
+  });
+  let env;
+  try {
+    env = await startContentScript({ videos: [video], stored: { speed: 2 } });
+    await env.ready;
+    assertEquals(video.playbackRate, 2);
+
+    // Simulate SPA navigation to the home feed (an inactive route).
+    env.location.pathname = "/";
+    env.location.href = "https://www.youtube.com/";
+    env.dispatchGlobalEvent("yt-navigate-finish");
+
+    // The video is handed back at the default rate.
+    assertEquals(video.playbackRate, 1);
+    assertEquals(video.rateWrites, [2, 1]);
+
+    // The persisted preference is untouched: the reset touches the element,
+    // not storage.
+    assertEquals(
+      env.storageWrites.some((write) => write.speed === 1),
+      false,
+    );
+  } finally {
+    await env?.restore();
+  }
+});
+
+Deno.test("navigating between Shorts keeps the chosen speed", async () => {
+  const video = createFakeVideo({
+    paused: false,
+    currentSrc: "https://example.test/short-to-short.mp4",
+    rect: { left: 100, top: 100, width: 400, height: 400 },
+    closest: null,
+  });
+  let env;
+  try {
+    env = await startContentScript({ videos: [video], stored: { speed: 2 } });
+    await env.ready;
+    assertEquals(video.playbackRate, 2);
+
+    // Navigate to another Short (active -> active).
+    env.location.pathname = "/shorts/next";
+    env.location.href = "https://www.youtube.com/shorts/next";
+    env.dispatchGlobalEvent("yt-navigate-finish");
+
+    // Flush the deferred reapply timeouts scheduled by onNavigate.
+    for (const timer of env.pendingTimers) {
+      if (
+        timer.kind === "timeout" && (timer.delay === 0 || timer.delay === 250)
+      ) {
+        env.runTimer(timer.handle);
+      }
+    }
+
+    // The chosen speed sticks; 1x was never written.
+    assertEquals(video.rateWrites.includes(1), false);
+    assertEquals(video.playbackRate, 2);
+  } finally {
+    await env?.restore();
+  }
+});
