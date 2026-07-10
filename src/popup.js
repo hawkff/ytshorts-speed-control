@@ -32,7 +32,18 @@
   const DEFAULT_SETTINGS = { enableOnWatch: false };
 
   let currentSpeed = Speed.DEFAULT_SPEED;
+  // Last speed that reached storage or the live page; rollback target when an
+  // operation fails completely.
+  let settledSpeed = Speed.DEFAULT_SPEED;
+  let speedRequestId = 0;
+  // Serializes speed side effects so an older operation can never reach
+  // storage or the content script after a newer one.
+  let speedQueue = Promise.resolve();
+
   let settings = { ...DEFAULT_SETTINGS };
+  let settledSettings = { ...DEFAULT_SETTINGS };
+  let settingsRequestId = 0;
+  let settingsQueue = Promise.resolve();
 
   /** Query the active tab; returns the tab or null. */
   async function getActiveTab() {
@@ -91,8 +102,13 @@
 
   /**
    * Apply a new speed: persist, tell the page, and update the UI.
+   * Renders optimistically, then reports exactly how far the change got
+   * (saved and applied / partial / neither). On total failure the UI rolls
+   * back to the last settled speed. Only the latest in-flight request may
+   * touch the UI after its side effects settle.
    * @param {unknown} value
-   * @returns {Promise<boolean>} true if the value parsed and was applied.
+   * @returns {Promise<boolean>} true if this is still the latest request and
+   * at least one side effect (storage or live page) succeeded.
    */
   async function applySpeed(value) {
     const parsed = Speed.parseSpeed(value);
@@ -100,18 +116,50 @@
       setStatus("Enter a speed between 0.1 and 16.", true);
       return false;
     }
+    speedRequestId += 1;
+    const requestId = speedRequestId;
     render(parsed);
-    // Persist first so the value survives even if no content script is present.
-    try {
-      await extensionApi.storage.local.set({ speed: parsed });
-    } catch (_err) {
-      // Non-fatal: the message below may still apply it live.
-    }
-    const res = await sendToTab({ type: "SET_SPEED", value: parsed });
-    if (res && res.ok) {
+
+    const run = speedQueue.then(async () => {
+      let saved = false;
+      // Persist first so the value survives even if no content script is
+      // present.
+      try {
+        await extensionApi.storage.local.set({ speed: parsed });
+        saved = true;
+      } catch (_err) {
+        // Non-fatal: the message below may still apply it live.
+      }
+      const res = await sendToTab({ type: "SET_SPEED", value: parsed });
+      const applied = !!(res && res.ok === true);
+      // Queue order matches invocation order, so even a stale success may
+      // advance the settled snapshot.
+      if (saved || applied) settledSpeed = parsed;
+      return { saved, applied };
+    });
+    // Keep the queue tail resolved so one failure cannot poison later ops.
+    speedQueue = run.then(() => undefined, () => undefined);
+    const { saved, applied } = await run;
+
+    // A newer request took over while we awaited; leave the UI to it.
+    if (requestId !== speedRequestId) return false;
+
+    if (saved && applied) {
       setStatus(`Playing at ${Speed.formatSpeed(parsed)}.`, false);
+    } else if (applied) {
+      setStatus("Applied for this tab, but couldn't save the speed.", true);
+    } else if (saved) {
+      setStatus(
+        `Saved ${
+          Speed.formatSpeed(parsed)
+        }. Open or reload YouTube to apply it.`,
+        true,
+      );
+    } else {
+      render(settledSpeed);
+      setStatus("Couldn't save or apply that speed.", true);
     }
-    return true;
+    return saved || applied;
   }
 
   /** Coerce stored/incoming settings into a known-shape object. */
@@ -141,16 +189,55 @@
     els.hintReset.textContent = `Reset speed to ${resetTarget}`;
   }
 
-  /** Persist settings and notify the page so it applies them live. */
+  /**
+   * Persist settings and notify the page so it applies them live.
+   * Same outcome contract as applySpeed: optimistic render, exact
+   * success/partial/failure status, rollback to the last settled settings on
+   * total failure, and only the latest request may touch the UI post-await.
+   * @returns {Promise<boolean>}
+   */
   async function applySettings(next) {
-    settings = normalizeSettings(next);
+    const requested = normalizeSettings(next);
+    settingsRequestId += 1;
+    const requestId = settingsRequestId;
+    settings = { ...requested };
     renderSettings();
-    try {
-      await extensionApi.storage.local.set({ settings: { ...settings } });
-    } catch (_err) {
-      // Non-fatal: the message below may still apply it live.
+
+    const run = settingsQueue.then(async () => {
+      let saved = false;
+      try {
+        await extensionApi.storage.local.set({
+          settings: { ...requested },
+        });
+        saved = true;
+      } catch (_err) {
+        // Non-fatal: the message below may still apply it live.
+      }
+      const res = await sendToTab({
+        type: "SET_SETTINGS",
+        settings: { ...requested },
+      });
+      const applied = !!(res && res.ok === true);
+      if (saved || applied) settledSettings = { ...requested };
+      return { saved, applied };
+    });
+    settingsQueue = run.then(() => undefined, () => undefined);
+    const { saved, applied } = await run;
+
+    if (requestId !== settingsRequestId) return false;
+
+    if (saved && applied) {
+      setStatus("Setting saved.", false);
+    } else if (applied) {
+      setStatus("Applied for this tab, but couldn't save the setting.", true);
+    } else if (saved) {
+      setStatus("Setting saved. Open or reload YouTube to apply it.", true);
+    } else {
+      settings = { ...settledSettings };
+      renderSettings();
+      setStatus("Couldn't save or apply that setting.", true);
     }
-    await sendToTab({ type: "SET_SETTINGS", settings: { ...settings } });
+    return saved || applied;
   }
 
   function buildPresets() {
@@ -185,8 +272,8 @@
 
     els.reset.addEventListener("click", () => applySpeed(Speed.DEFAULT_SPEED));
 
-    els.enableOnWatch.addEventListener("change", () => {
-      applySettings({ enableOnWatch: els.enableOnWatch.checked });
+    els.enableOnWatch.addEventListener("change", async () => {
+      await applySettings({ enableOnWatch: els.enableOnWatch.checked });
     });
   }
 
@@ -223,6 +310,8 @@
 
     render(speed);
     renderSettings();
+    settledSpeed = currentSpeed;
+    settledSettings = { ...settings };
 
     if (!onYouTube) {
       setStatus("Open a YouTube tab to control playback.", true);
