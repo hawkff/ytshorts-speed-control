@@ -312,6 +312,8 @@
   // tap, or any key) immediately ends enforcement so the user can resume.
   let pausedVideo = null;
   let pauseEnforceUntil = 0;
+  /** Handle of the single pending pause-sweep timeout, or null. */
+  let pauseSweepTimer = null;
 
   /** Begin honoring a user-requested pause and resist YouTube re-playing it. */
   function userPause(video) {
@@ -345,8 +347,18 @@
     if (p && typeof p.catch === "function") p.catch(() => {});
   }
 
+  /** Cancel any pending pause-sweep timeout so no stale chain survives. */
+  function cancelPauseSweep() {
+    if (pauseSweepTimer === null) return;
+    clearTimeout(pauseSweepTimer);
+    pauseSweepTimer = null;
+  }
+
   /** Stop enforcing any pause intent. */
   function releasePause() {
+    // Always cancel the sweep, even when no pause state remains: a stale
+    // callback must never outlive its pause intent.
+    cancelPauseSweep();
     if (!pausedVideo) return;
     pausedVideo.removeEventListener("play", reassertPause, true);
     pausedVideo.removeEventListener("playing", reassertPause, true);
@@ -398,9 +410,16 @@
     }
   }
 
-  /** Poll a few times during the enforcement window as a fallback. */
+  /**
+   * Poll a few times during the enforcement window as a fallback. Exactly one
+   * pending sweep timeout exists at a time, owned by pauseSweepTimer, so
+   * releasePause can always cancel the chain.
+   */
   function schedulePauseSweep() {
+    cancelPauseSweep();
     const tick = () => {
+      // This callback has fired; its handle is no longer pending.
+      pauseSweepTimer = null;
       if (!pausedVideo) return;
       if (Date.now() > pauseEnforceUntil) {
         releasePause();
@@ -413,9 +432,9 @@
           // ignore
         }
       }
-      setTimeout(tick, 100);
+      pauseSweepTimer = setTimeout(tick, 100);
     };
-    setTimeout(tick, 100);
+    pauseSweepTimer = setTimeout(tick, 100);
   }
 
   /**

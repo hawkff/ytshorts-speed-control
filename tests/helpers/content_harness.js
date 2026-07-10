@@ -362,7 +362,22 @@ export async function startContentScript(options = {}) {
       return queryCount;
     },
     get pendingTimers() {
-      return [...timers.values()].map(({ kind, delay }) => ({ kind, delay }));
+      return [...timers.entries()].map(([handle, { kind, delay }]) => ({
+        handle,
+        kind,
+        delay,
+      }));
+    },
+    runTimer(handle) {
+      const timer = timers.get(handle);
+      if (!timer) throw new Error(`timer ${handle} is not active`);
+      if (timer.kind === "timeout") timers.delete(handle);
+      timer.callback(...timer.args);
+    },
+    dispatchGlobalEvent(type) {
+      for (const listener of [...(globalListeners.get(type) ?? [])]) {
+        listener({ type });
+      }
     },
     get pendingAnimationFrames() {
       return animationFrames.size;

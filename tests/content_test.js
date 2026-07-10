@@ -286,6 +286,93 @@ Deno.test("enabling watch via settings applies speed without DOM churn", async (
   }
 });
 
+/** Active 100ms pause-sweep timeouts; other 0/250ms timers are unrelated. */
+function pauseSweepTimers(env) {
+  return env.pendingTimers.filter(
+    (timer) => timer.kind === "timeout" && timer.delay === 100,
+  );
+}
+
+Deno.test("releasing a pause cancels the pending sweep timer", async () => {
+  const video = createFakeVideo({
+    paused: false,
+    currentSrc: "https://example.test/pause.mp4",
+    rect: { left: 100, top: 100, width: 400, height: 400 },
+    closest: null,
+  });
+  let env;
+  try {
+    env = await startContentScript({ videos: [video], stored: { speed: 2 } });
+    await env.ready;
+
+    env.dispatchKey({ key: "p", code: "KeyP" });
+    assertEquals(video.pauseCalls, 1);
+    assertEquals(pauseSweepTimers(env).length, 1);
+
+    // P again resumes playback; releasePause must cancel the pending sweep
+    // so the stale callback can never fire or enqueue a successor.
+    env.dispatchKey({ key: "p", code: "KeyP" });
+    assertEquals(video.playCalls, 1);
+    assertEquals(pauseSweepTimers(env).length, 0);
+  } finally {
+    await env?.restore();
+  }
+});
+
+Deno.test("rapid re-pause keeps exactly one sweep chain", async () => {
+  const video = createFakeVideo({
+    paused: false,
+    currentSrc: "https://example.test/repause.mp4",
+    rect: { left: 100, top: 100, width: 400, height: 400 },
+    closest: null,
+  });
+  let env;
+  try {
+    env = await startContentScript({ videos: [video], stored: { speed: 2 } });
+    await env.ready;
+
+    // Pause, play, and re-pause before the first sweep tick ever fires.
+    env.dispatchKey({ key: "p", code: "KeyP" });
+    env.dispatchKey({ key: "p", code: "KeyP" });
+    env.dispatchKey({ key: "p", code: "KeyP" });
+    assertEquals(video.pauseCalls, 2);
+
+    const sweeps = pauseSweepTimers(env);
+    assertEquals(sweeps.length, 1);
+
+    // Flushing the one sweep tick must enqueue exactly one successor, not a
+    // second chain from the pre-play pause.
+    env.runTimer(sweeps[0].handle);
+    assertEquals(pauseSweepTimers(env).length, 1);
+  } finally {
+    await env?.restore();
+  }
+});
+
+Deno.test("navigation releases the pause and cancels the sweep", async () => {
+  const video = createFakeVideo({
+    paused: false,
+    currentSrc: "https://example.test/navigate.mp4",
+    rect: { left: 100, top: 100, width: 400, height: 400 },
+    closest: null,
+  });
+  let env;
+  try {
+    env = await startContentScript({ videos: [video], stored: { speed: 2 } });
+    await env.ready;
+
+    env.dispatchKey({ key: "p", code: "KeyP" });
+    assertEquals(pauseSweepTimers(env).length, 1);
+
+    // The real SPA navigation handler must release the pause intent and
+    // cancel the pending sweep along with it.
+    env.dispatchGlobalEvent("yt-navigate-finish");
+    assertEquals(pauseSweepTimers(env).length, 0);
+  } finally {
+    await env?.restore();
+  }
+});
+
 Deno.test("P and speed target the same visible video", async () => {
   const offscreen = createFakeVideo({
     paused: false,
