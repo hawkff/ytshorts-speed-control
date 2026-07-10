@@ -403,3 +403,342 @@ Deno.test("P and speed target the same visible video", async () => {
     await env?.restore();
   }
 });
+
+Deno.test("] steps the speed up and persists it", async () => {
+  const video = createFakeVideo({
+    paused: false,
+    currentSrc: "https://example.test/up.mp4",
+    rect: { left: 100, top: 100, width: 400, height: 400 },
+  });
+  let env;
+  try {
+    env = await startContentScript({ videos: [video], stored: { speed: 2 } });
+    await env.ready;
+
+    const event = env.dispatchKey({ key: "]", code: "BracketRight" });
+
+    assertEquals(event.defaultPrevented, true);
+    assertEquals(video.playbackRate, 2.25);
+    assertEquals(video.rateWrites[video.rateWrites.length - 1], 2.25);
+    assertEquals(
+      env.storageWrites.some((write) => write.speed === 2.25),
+      true,
+    );
+  } finally {
+    await env?.restore();
+  }
+});
+
+Deno.test("[ steps the speed down and persists it", async () => {
+  const video = createFakeVideo({
+    paused: false,
+    currentSrc: "https://example.test/down.mp4",
+    rect: { left: 100, top: 100, width: 400, height: 400 },
+  });
+  let env;
+  try {
+    env = await startContentScript({ videos: [video], stored: { speed: 2 } });
+    await env.ready;
+
+    const event = env.dispatchKey({ key: "[", code: "BracketLeft" });
+
+    assertEquals(event.defaultPrevented, true);
+    assertEquals(video.playbackRate, 1.75);
+    assertEquals(video.rateWrites[video.rateWrites.length - 1], 1.75);
+    assertEquals(
+      env.storageWrites.some((write) => write.speed === 1.75),
+      true,
+    );
+  } finally {
+    await env?.restore();
+  }
+});
+
+Deno.test("Backspace resets the speed to 1x", async () => {
+  const video = createFakeVideo({
+    paused: false,
+    currentSrc: "https://example.test/reset.mp4",
+    rect: { left: 100, top: 100, width: 400, height: 400 },
+  });
+  let env;
+  try {
+    env = await startContentScript({ videos: [video], stored: { speed: 2 } });
+    await env.ready;
+
+    const event = env.dispatchKey({ key: "Backspace", code: "Backspace" });
+
+    assertEquals(event.defaultPrevented, true);
+    assertEquals(video.playbackRate, 1);
+    assertEquals(
+      env.storageWrites.some((write) => write.speed === 1),
+      true,
+    );
+  } finally {
+    await env?.restore();
+  }
+});
+
+Deno.test("modified combos are left to the browser", async () => {
+  const video = createFakeVideo({
+    paused: false,
+    currentSrc: "https://example.test/modified.mp4",
+    rect: { left: 100, top: 100, width: 400, height: 400 },
+  });
+  let env;
+  try {
+    env = await startContentScript({ videos: [video], stored: { speed: 2 } });
+    await env.ready;
+
+    const events = [
+      env.dispatchKey({ key: "]", code: "BracketRight", metaKey: true }),
+      env.dispatchKey({ key: "[", code: "BracketLeft", ctrlKey: true }),
+      env.dispatchKey({ key: "Backspace", code: "Backspace", altKey: true }),
+    ];
+
+    for (const event of events) {
+      assertEquals(event.defaultPrevented, false);
+    }
+    assertEquals(video.rateWrites, [2]);
+    assertEquals(
+      env.storageWrites.some((write) => "speed" in write),
+      false,
+    );
+  } finally {
+    await env?.restore();
+  }
+});
+
+Deno.test("AltGr brackets still step (AltGr reports as Ctrl+Alt)", async () => {
+  const video = createFakeVideo({
+    paused: false,
+    currentSrc: "https://example.test/altgr.mp4",
+    rect: { left: 100, top: 100, width: 400, height: 400 },
+  });
+  let env;
+  try {
+    env = await startContentScript({ videos: [video], stored: { speed: 2 } });
+    await env.ready;
+
+    const event = env.dispatchKey({
+      key: "[",
+      code: "BracketLeft",
+      ctrlKey: true,
+      altKey: true,
+      altGraphKey: true,
+    });
+
+    assertEquals(event.defaultPrevented, true);
+    assertEquals(video.playbackRate, 1.75);
+  } finally {
+    await env?.restore();
+  }
+});
+
+Deno.test("keys are ignored while typing in a field", async () => {
+  const video = createFakeVideo({
+    paused: false,
+    currentSrc: "https://example.test/editable.mp4",
+    rect: { left: 100, top: 100, width: 400, height: 400 },
+  });
+  let env;
+  try {
+    env = await startContentScript({ videos: [video], stored: { speed: 2 } });
+    await env.ready;
+
+    const input = new globalThis.Element();
+    input.tagName = "INPUT";
+    const event = env.dispatchKey({
+      key: "]",
+      code: "BracketRight",
+      target: input,
+    });
+
+    assertEquals(event.defaultPrevented, false);
+    assertEquals(video.rateWrites, [2]);
+  } finally {
+    await env?.restore();
+  }
+});
+
+Deno.test("key repeat does not step again", async () => {
+  const video = createFakeVideo({
+    paused: false,
+    currentSrc: "https://example.test/repeat.mp4",
+    rect: { left: 100, top: 100, width: 400, height: 400 },
+  });
+  let env;
+  try {
+    env = await startContentScript({ videos: [video], stored: { speed: 2 } });
+    await env.ready;
+
+    const event = env.dispatchKey({
+      key: "]",
+      code: "BracketRight",
+      repeat: true,
+    });
+
+    assertEquals(event.defaultPrevented, false);
+    assertEquals(video.rateWrites, [2]);
+  } finally {
+    await env?.restore();
+  }
+});
+
+Deno.test("keys are inert on a watch page without opt-in", async () => {
+  const video = createFakeVideo({
+    paused: false,
+    currentSrc: "https://example.test/inert.mp4",
+    rect: { left: 100, top: 100, width: 400, height: 400 },
+  });
+  let env;
+  try {
+    env = await startContentScript({
+      pathname: "/watch",
+      href: "https://www.youtube.com/watch?v=example",
+      videos: [video],
+      stored: { speed: 2, settings: { enableOnWatch: false } },
+    });
+    await env.ready;
+
+    const event = env.dispatchKey({ key: "]", code: "BracketRight" });
+
+    assertEquals(event.defaultPrevented, false);
+    assertEquals(video.rateWrites, []);
+  } finally {
+    await env?.restore();
+  }
+});
+
+Deno.test("ratechange away from the target is reasserted; matching ratechange is a no-op", async () => {
+  const video = createFakeVideo({
+    paused: false,
+    currentSrc: "https://example.test/ratechange.mp4",
+    rect: { left: 100, top: 100, width: 400, height: 400 },
+  });
+  let env;
+  try {
+    env = await startContentScript({ videos: [video], stored: { speed: 2 } });
+    await env.ready;
+    assertEquals(video.rateWrites, [2]);
+
+    // Simulate YouTube resetting the rate back to 1x.
+    video.playbackRate = 1;
+    video.emit("ratechange");
+
+    assertEquals(video.playbackRate, 2);
+    assertEquals(video.rateWrites, [2, 1, 2]);
+
+    // A ratechange that already matches the target must not write again.
+    video.emit("ratechange");
+    assertEquals(video.rateWrites, [2, 1, 2]);
+  } finally {
+    await env?.restore();
+  }
+});
+
+Deno.test("removing the settings key resets opt-in state and releases the video", async () => {
+  const video = createFakeVideo({
+    paused: false,
+    currentSrc: "https://example.test/watch.mp4",
+    rect: { left: 100, top: 100, width: 400, height: 400 },
+  });
+  let env;
+  try {
+    env = await startContentScript({
+      pathname: "/watch",
+      href: "https://www.youtube.com/watch?v=example",
+      videos: [video],
+      stored: { speed: 2, settings: { enableOnWatch: true } },
+    });
+    await env.ready;
+    assertEquals(video.playbackRate, 2);
+
+    // Simulate the settings key being removed from storage externally.
+    env.emitStorageChange({
+      settings: { oldValue: { enableOnWatch: true }, newValue: undefined },
+    });
+
+    // The page is no longer active: the video is released and reset to 1x.
+    assertEquals(video.playbackRate, 1);
+    assertEquals(video.rateWrites, [2, 1]);
+
+    // Adoption must not re-persist settings (no storage write loop).
+    assertEquals(
+      env.storageWrites.some((write) => "settings" in write),
+      false,
+    );
+
+    const state = env.sendMessage({ type: "GET_STATE" });
+    assertEquals(state.settings.enableOnWatch, false);
+  } finally {
+    await env?.restore();
+  }
+});
+
+Deno.test("navigating to an inactive route resets the managed video to 1x", async () => {
+  const video = createFakeVideo({
+    paused: false,
+    currentSrc: "https://example.test/navigate-away.mp4",
+    rect: { left: 100, top: 100, width: 400, height: 400 },
+    closest: null,
+  });
+  let env;
+  try {
+    env = await startContentScript({ videos: [video], stored: { speed: 2 } });
+    await env.ready;
+    assertEquals(video.playbackRate, 2);
+
+    // Simulate SPA navigation to the home feed (an inactive route).
+    env.location.pathname = "/";
+    env.location.href = "https://www.youtube.com/";
+    env.dispatchGlobalEvent("yt-navigate-finish");
+
+    // The video is handed back at the default rate.
+    assertEquals(video.playbackRate, 1);
+    assertEquals(video.rateWrites, [2, 1]);
+
+    // The persisted preference is untouched: the reset touches the element,
+    // not storage.
+    assertEquals(
+      env.storageWrites.some((write) => write.speed === 1),
+      false,
+    );
+  } finally {
+    await env?.restore();
+  }
+});
+
+Deno.test("navigating between Shorts keeps the chosen speed", async () => {
+  const video = createFakeVideo({
+    paused: false,
+    currentSrc: "https://example.test/short-to-short.mp4",
+    rect: { left: 100, top: 100, width: 400, height: 400 },
+    closest: null,
+  });
+  let env;
+  try {
+    env = await startContentScript({ videos: [video], stored: { speed: 2 } });
+    await env.ready;
+    assertEquals(video.playbackRate, 2);
+
+    // Navigate to another Short (active -> active).
+    env.location.pathname = "/shorts/next";
+    env.location.href = "https://www.youtube.com/shorts/next";
+    env.dispatchGlobalEvent("yt-navigate-finish");
+
+    // Flush the deferred reapply timeouts scheduled by onNavigate.
+    for (const timer of env.pendingTimers) {
+      if (
+        timer.kind === "timeout" && (timer.delay === 0 || timer.delay === 250)
+      ) {
+        env.runTimer(timer.handle);
+      }
+    }
+
+    // The chosen speed sticks; 1x was never written.
+    assertEquals(video.rateWrites.includes(1), false);
+    assertEquals(video.playbackRate, 2);
+  } finally {
+    await env?.restore();
+  }
+});

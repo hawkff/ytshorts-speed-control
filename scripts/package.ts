@@ -11,6 +11,7 @@ const sharedFiles = [
   "icons/icon16.png",
   "icons/icon48.png",
   "icons/icon128.png",
+  "lib/settings.js",
   "lib/speed.js",
   "src/content.js",
   "src/popup.css",

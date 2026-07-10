@@ -6,6 +6,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import "../../lib/speed.js";
+import "../../lib/settings.js";
 
 const popupImports = [
   () => import("../../src/popup.js?popup-harness=0"),
