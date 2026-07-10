@@ -22,6 +22,22 @@ const contentScriptImports = [
   () => import("../../src/content.js?content-harness=13"),
   () => import("../../src/content.js?content-harness=14"),
   () => import("../../src/content.js?content-harness=15"),
+  () => import("../../src/content.js?content-harness=16"),
+  () => import("../../src/content.js?content-harness=17"),
+  () => import("../../src/content.js?content-harness=18"),
+  () => import("../../src/content.js?content-harness=19"),
+  () => import("../../src/content.js?content-harness=20"),
+  () => import("../../src/content.js?content-harness=21"),
+  () => import("../../src/content.js?content-harness=22"),
+  () => import("../../src/content.js?content-harness=23"),
+  () => import("../../src/content.js?content-harness=24"),
+  () => import("../../src/content.js?content-harness=25"),
+  () => import("../../src/content.js?content-harness=26"),
+  () => import("../../src/content.js?content-harness=27"),
+  () => import("../../src/content.js?content-harness=28"),
+  () => import("../../src/content.js?content-harness=29"),
+  () => import("../../src/content.js?content-harness=30"),
+  () => import("../../src/content.js?content-harness=31"),
 ];
 
 let nextContentScriptImport = 0;
@@ -190,6 +206,7 @@ export async function startContentScript(options = {}) {
       this.ctrlKey = init.ctrlKey ?? false;
       this.metaKey = init.metaKey ?? false;
       this.altKey = init.altKey ?? false;
+      this.altGraphKey = init.altGraphKey ?? false;
       this.defaultPrevented = false;
       this.immediatePropagationStopped = false;
     }
