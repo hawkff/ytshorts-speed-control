@@ -44,6 +44,16 @@
   let desiredSpeed = Speed.DEFAULT_SPEED;
   /** Current settings; mirrors local extension storage. */
   let settings = { ...DEFAULT_SETTINGS };
+  /**
+   * Revision counters for live state. Every accepted external mutation of
+   * speed/settings (popup message, keyboard, storage event) bumps its counter,
+   * even when the incoming value equals the current one. Init captures both
+   * before its awaited storage read and only adopts the snapshot for keys
+   * whose revision is unchanged, so an older snapshot never overwrites newer
+   * live state.
+   */
+  let speedRevision = 0;
+  let settingsRevision = 0;
   /** The video we are currently managing, if any. */
   let managedVideo = null;
   let indicatorTimer = null;
@@ -216,6 +226,7 @@
    * @param {boolean} [showOverlay]
    */
   function setSpeed(value, showOverlay = true) {
+    speedRevision += 1;
     desiredSpeed = Speed.clampSpeed(value);
     reapply();
     if (showOverlay) showIndicator(desiredSpeed);
@@ -450,6 +461,7 @@
    * @param {Record<string, unknown>} incoming
    */
   function adoptSettings(incoming) {
+    settingsRevision += 1;
     const wasActive = isActivePage();
     settings = normalizeSettings(incoming);
     reconcileAfterSettings(wasActive);
@@ -461,6 +473,7 @@
    * @param {Record<string, unknown>} incoming
    */
   function applySettings(incoming) {
+    settingsRevision += 1;
     const wasActive = isActivePage();
     settings = normalizeSettings(incoming);
     try {
@@ -742,9 +755,14 @@
         if (area !== "local") return;
         if (changes[STORAGE_KEY]) {
           const next = Speed.parseSpeed(changes[STORAGE_KEY].newValue);
-          if (next !== null && next !== desiredSpeed) {
-            desiredSpeed = next;
-            reapply();
+          if (next !== null) {
+            // Bump even when the value already matches, so a pending init
+            // snapshot knows this newer write supersedes it.
+            speedRevision += 1;
+            if (next !== desiredSpeed) {
+              desiredSpeed = next;
+              reapply();
+            }
           }
         }
         if (changes[SETTINGS_KEY]) {
@@ -763,16 +781,25 @@
       console.error("[YTShortsSpeed] cannot watch storage", err);
     }
 
-    // Load the persisted speed + settings, then start managing.
+    // Load the persisted speed + settings, then start managing. Any live
+    // update that lands while the read is pending bumps a revision counter;
+    // per key, the snapshot is adopted only if its revision is unchanged.
+    const speedRevisionAtRead = speedRevision;
+    const settingsRevisionAtRead = settingsRevision;
     try {
       const data = await extensionApi.storage.local.get([
         STORAGE_KEY,
         SETTINGS_KEY,
       ]);
       const stored = Speed.parseSpeed(data && data[STORAGE_KEY]);
-      if (stored !== null) desiredSpeed = stored;
+      if (stored !== null && speedRevision === speedRevisionAtRead) {
+        desiredSpeed = stored;
+      }
       const storedSettings = data && data[SETTINGS_KEY];
-      if (storedSettings && typeof storedSettings === "object") {
+      if (
+        storedSettings && typeof storedSettings === "object" &&
+        settingsRevision === settingsRevisionAtRead
+      ) {
         settings = normalizeSettings(storedSettings);
       }
     } catch (err) {
