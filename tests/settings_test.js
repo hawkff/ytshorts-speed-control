@@ -4,6 +4,9 @@
  * lib/settings.js is a classic (non-module) script that attaches its API to
  * globalThis. Importing it for its side effect under Deno populates
  * globalThis.YTShortsSettings, which we then exercise here.
+ *
+ * Copyright (C) 2026 hawkff
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import { assert, assertEquals } from "@std/assert";
 import "../lib/settings.js";

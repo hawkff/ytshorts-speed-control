@@ -201,6 +201,24 @@
     managedVideo = null;
   }
 
+  /**
+   * Release the managed video and hand it back at the default (1x) rate.
+   * Used whenever control ends on a page we no longer manage (opt-out
+   * deactivation, navigating to an inactive route).
+   */
+  function releaseVideoAtDefaultRate() {
+    if (!managedVideo) return;
+    const video = managedVideo;
+    detach();
+    try {
+      if (!ratesEqual(video.playbackRate, Speed.DEFAULT_SPEED)) {
+        video.playbackRate = Speed.DEFAULT_SPEED;
+      }
+    } catch (err) {
+      console.error("[YTShortsSpeed] failed to reset playbackRate", err);
+    }
+  }
+
   function onRateChange() {
     if (!managedVideo) return;
     const target = Speed.clampSpeed(desiredSpeed);
@@ -443,15 +461,7 @@
       reapply();
     } else if (wasActive && managedVideo) {
       // Just deactivated on this page: release control and reset to 1x.
-      const video = managedVideo;
-      detach();
-      try {
-        if (!ratesEqual(video.playbackRate, Speed.DEFAULT_SPEED)) {
-          video.playbackRate = Speed.DEFAULT_SPEED;
-        }
-      } catch (err) {
-        console.error("[YTShortsSpeed] failed to reset playbackRate", err);
-      }
+      releaseVideoAtDefaultRate();
     }
   }
 
@@ -692,15 +702,7 @@
     // without this the last speed sticks with no way to change it from the
     // extension.
     if (!isActivePage() && managedVideo) {
-      const video = managedVideo;
-      detach();
-      try {
-        if (!ratesEqual(video.playbackRate, Speed.DEFAULT_SPEED)) {
-          video.playbackRate = Speed.DEFAULT_SPEED;
-        }
-      } catch (err) {
-        console.error("[YTShortsSpeed] failed to reset playbackRate", err);
-      }
+      releaseVideoAtDefaultRate();
     } else {
       detach();
     }
