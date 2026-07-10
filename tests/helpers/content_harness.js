@@ -1,4 +1,5 @@
 import "../../lib/speed.js";
+import "../../lib/settings.js";
 
 // Deno only grants permission-free dynamic imports it can see statically, so
 // this fixed pool of literal import specifiers is the only way to re-import

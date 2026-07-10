@@ -12,6 +12,7 @@
   "use strict";
 
   const Speed = globalThis.YTShortsSpeed;
+  const Settings = globalThis.YTShortsSettings;
   const extensionApi = globalThis.browser ?? globalThis.chrome;
 
   const els = {
@@ -28,9 +29,6 @@
     hintReset: document.getElementById("hint-reset"),
   };
 
-  /** Mirror of content.js DEFAULT_SETTINGS; keep the two in sync. */
-  const DEFAULT_SETTINGS = { enableOnWatch: false };
-
   let currentSpeed = Speed.DEFAULT_SPEED;
   // Last speed that reached storage or the live page; rollback target when an
   // operation fails completely.
@@ -40,8 +38,8 @@
   // storage or the content script after a newer one.
   let speedQueue = Promise.resolve();
 
-  let settings = { ...DEFAULT_SETTINGS };
-  let settledSettings = { ...DEFAULT_SETTINGS };
+  let settings = { ...Settings.DEFAULT_SETTINGS };
+  let settledSettings = { ...Settings.DEFAULT_SETTINGS };
   let settingsRequestId = 0;
   let settingsQueue = Promise.resolve();
 
@@ -162,15 +160,6 @@
     return saved || applied;
   }
 
-  /** Coerce stored/incoming settings into a known-shape object. */
-  function normalizeSettings(incoming) {
-    const next = { ...DEFAULT_SETTINGS };
-    if (incoming && typeof incoming.enableOnWatch === "boolean") {
-      next.enableOnWatch = incoming.enableOnWatch;
-    }
-    return next;
-  }
-
   /** Reflect current settings onto the controls. */
   function renderSettings() {
     els.enableOnWatch.checked = settings.enableOnWatch;
@@ -197,7 +186,7 @@
    * @returns {Promise<boolean>}
    */
   async function applySettings(next) {
-    const requested = normalizeSettings(next);
+    const requested = Settings.normalizeSettings(next);
     settingsRequestId += 1;
     const requestId = settingsRequestId;
     settings = { ...requested };
@@ -295,7 +284,7 @@
       ]);
       const stored = Speed.parseSpeed(data && data.speed);
       if (stored !== null) speed = stored;
-      settings = normalizeSettings(data && data.settings);
+      settings = Settings.normalizeSettings(data && data.settings);
     } catch (_err) {
       // ignore; keep defaults
     }
@@ -305,7 +294,7 @@
       speed = state.speed;
     }
     if (state && state.settings) {
-      settings = normalizeSettings(state.settings);
+      settings = Settings.normalizeSettings(state.settings);
     }
 
     render(speed);

@@ -18,8 +18,10 @@
   "use strict";
 
   const Speed = globalThis.YTShortsSpeed;
-  if (!Speed) {
-    // lib/speed.js failed to load; bail loudly but harmlessly.
+  const Settings = globalThis.YTShortsSettings;
+  if (!Speed || !Settings) {
+    // lib/speed.js or lib/settings.js failed to load; bail loudly but
+    // harmlessly.
     console.error("[YTShortsSpeed] speed helpers missing; content script idle");
     return;
   }
@@ -33,17 +35,10 @@
   const INDICATOR_ID = "yt-shorts-speed-indicator";
   const INDICATOR_TIMEOUT_MS = 1200;
 
-  /** Default settings; merged over whatever is persisted. */
-  const DEFAULT_SETTINGS = Object.freeze({
-    // When true, the same speed control also applies to regular YouTube
-    // watch pages (/watch). Off by default: Shorts only.
-    enableOnWatch: false,
-  });
-
   /** Current desired speed; mirrors local extension storage. */
   let desiredSpeed = Speed.DEFAULT_SPEED;
   /** Current settings; mirrors local extension storage. */
-  let settings = { ...DEFAULT_SETTINGS };
+  let settings = Settings.normalizeSettings(undefined);
   /**
    * Revision counters for live state. Every accepted external mutation of
    * speed/settings (popup message, keyboard, storage event) bumps its counter,
@@ -438,21 +433,6 @@
   }
 
   /**
-   * Coerce arbitrary input into a valid settings object (only known keys,
-   * correct types), over the defaults. Unknown or missing keys fall back to
-   * DEFAULT_SETTINGS, so adopting `{}` resets to defaults.
-   * @param {Record<string, unknown>} incoming
-   * @returns {typeof DEFAULT_SETTINGS}
-   */
-  function normalizeSettings(incoming) {
-    const next = { ...DEFAULT_SETTINGS };
-    if (typeof incoming.enableOnWatch === "boolean") {
-      next.enableOnWatch = incoming.enableOnWatch;
-    }
-    return next;
-  }
-
-  /**
    * Apply settings side-effects after `settings` has been updated: either
    * re-assert speed on a now-active page, or release control + reset to 1x if
    * the page just became inactive.
@@ -483,7 +463,7 @@
   function adoptSettings(incoming) {
     settingsRevision += 1;
     const wasActive = isActivePage();
-    settings = normalizeSettings(incoming);
+    settings = Settings.normalizeSettings(incoming);
     reconcileAfterSettings(wasActive);
   }
 
@@ -495,7 +475,7 @@
   function applySettings(incoming) {
     settingsRevision += 1;
     const wasActive = isActivePage();
-    settings = normalizeSettings(incoming);
+    settings = Settings.normalizeSettings(incoming);
     try {
       extensionApi.storage.local
         .set({ [SETTINGS_KEY]: { ...settings } })
@@ -809,15 +789,10 @@
           }
         }
         if (changes[SETTINGS_KEY]) {
-          const incoming = changes[SETTINGS_KEY].newValue;
           // adoptSettings does NOT re-persist, avoiding a storage write loop.
-          // If the key was removed (newValue undefined), fall back to defaults
-          // so stale opt-in state doesn't linger until reload.
-          if (incoming && typeof incoming === "object") {
-            adoptSettings(incoming);
-          } else {
-            adoptSettings({});
-          }
+          // If the key was removed (newValue undefined), the normalizer falls
+          // back to defaults so stale opt-in state doesn't linger until reload.
+          adoptSettings(changes[SETTINGS_KEY].newValue);
         }
       });
     } catch (err) {
@@ -843,7 +818,7 @@
         storedSettings && typeof storedSettings === "object" &&
         settingsRevision === settingsRevisionAtRead
       ) {
-        settings = normalizeSettings(storedSettings);
+        settings = Settings.normalizeSettings(storedSettings);
       }
     } catch (err) {
       console.error("[YTShortsSpeed] storage.get failed; using default", err);
