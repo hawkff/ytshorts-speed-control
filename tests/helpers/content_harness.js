@@ -1,5 +1,10 @@
 import "../../lib/speed.js";
 
+// Deno only grants permission-free dynamic imports it can see statically, so
+// this fixed pool of literal import specifiers is the only way to re-import
+// the content script per test. It must hold at least one entry for every
+// startContentScript() call across the suite; adding tests that start the
+// content script requires adding entries here, or the pool-exhausted error fires.
 const contentScriptImports = [
   () => import("../../src/content.js?content-harness=0"),
   () => import("../../src/content.js?content-harness=1"),
