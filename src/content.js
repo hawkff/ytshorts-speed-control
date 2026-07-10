@@ -439,12 +439,13 @@
 
   /**
    * Coerce arbitrary input into a valid settings object (only known keys,
-   * correct types), merged over the current settings.
+   * correct types), over the defaults. Unknown or missing keys fall back to
+   * DEFAULT_SETTINGS, so adopting `{}` resets to defaults.
    * @param {Record<string, unknown>} incoming
    * @returns {typeof DEFAULT_SETTINGS}
    */
   function normalizeSettings(incoming) {
-    const next = { ...DEFAULT_SETTINGS, ...settings };
+    const next = { ...DEFAULT_SETTINGS };
     if (typeof incoming.enableOnWatch === "boolean") {
       next.enableOnWatch = incoming.enableOnWatch;
     }

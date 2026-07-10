@@ -635,3 +635,42 @@ Deno.test("ratechange away from the target is reasserted; matching ratechange is
     await env?.restore();
   }
 });
+
+Deno.test("removing the settings key resets opt-in state and releases the video", async () => {
+  const video = createFakeVideo({
+    paused: false,
+    currentSrc: "https://example.test/watch.mp4",
+    rect: { left: 100, top: 100, width: 400, height: 400 },
+  });
+  let env;
+  try {
+    env = await startContentScript({
+      pathname: "/watch",
+      href: "https://www.youtube.com/watch?v=example",
+      videos: [video],
+      stored: { speed: 2, settings: { enableOnWatch: true } },
+    });
+    await env.ready;
+    assertEquals(video.playbackRate, 2);
+
+    // Simulate the settings key being removed from storage externally.
+    env.emitStorageChange({
+      settings: { oldValue: { enableOnWatch: true }, newValue: undefined },
+    });
+
+    // The page is no longer active: the video is released and reset to 1x.
+    assertEquals(video.playbackRate, 1);
+    assertEquals(video.rateWrites, [2, 1]);
+
+    // Adoption must not re-persist settings (no storage write loop).
+    assertEquals(
+      env.storageWrites.some((write) => "settings" in write),
+      false,
+    );
+
+    const state = env.sendMessage({ type: "GET_STATE" });
+    assertEquals(state.settings.enableOnWatch, false);
+  } finally {
+    await env?.restore();
+  }
+});
