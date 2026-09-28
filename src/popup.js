@@ -30,17 +30,18 @@
   };
 
   let currentSpeed = Speed.DEFAULT_SPEED;
-  // Last speed that reached storage or the live page; rollback target when an
-  // operation fails completely.
-  let settledSpeed = Speed.DEFAULT_SPEED;
+  // Null until startup or a successful write establishes a rollback value.
+  let settledSpeed = null;
   let speedRequestId = 0;
+  let speedPending = false;
   // Serializes speed side effects so an older operation can never reach
   // storage or the content script after a newer one.
   let speedQueue = Promise.resolve();
 
   let settings = { ...Settings.DEFAULT_SETTINGS };
-  let settledSettings = { ...Settings.DEFAULT_SETTINGS };
+  let settledSettings = null;
   let settingsRequestId = 0;
+  let settingsPending = false;
   let settingsQueue = Promise.resolve();
 
   /** Query the active tab; returns the tab or null. */
@@ -101,7 +102,7 @@
   /**
    * Apply a new speed: persist, tell the page, and update the UI.
    * Renders optimistically, then reports exactly how far the change got
-   * (saved and applied / partial / neither). On total failure the UI rolls
+   * (saved and accepted / partial / neither). On total failure the UI rolls
    * back to the last settled speed. Only the latest in-flight request may
    * touch the UI after its side effects settle.
    * @param {unknown} value
@@ -116,6 +117,7 @@
     }
     speedRequestId += 1;
     const requestId = speedRequestId;
+    speedPending = true;
     render(parsed);
 
     const run = speedQueue.then(async () => {
@@ -141,11 +143,12 @@
 
     // A newer request took over while we awaited; leave the UI to it.
     if (requestId !== speedRequestId) return false;
+    speedPending = false;
 
     if (saved && applied) {
-      setStatus(`Playing at ${Speed.formatSpeed(parsed)}.`, false);
+      setStatus(`Saved ${Speed.formatSpeed(parsed)}.`, false);
     } else if (applied) {
-      setStatus("Applied for this tab, but couldn't save the speed.", true);
+      setStatus("Speed set for this tab, but couldn't save the speed.", true);
     } else if (saved) {
       setStatus(
         `Saved ${
@@ -154,7 +157,7 @@
         true,
       );
     } else {
-      render(settledSpeed);
+      render(settledSpeed ?? Speed.DEFAULT_SPEED);
       setStatus("Couldn't save or apply that speed.", true);
     }
     return saved || applied;
@@ -189,6 +192,7 @@
     const requested = Settings.normalizeSettings(next);
     settingsRequestId += 1;
     const requestId = settingsRequestId;
+    settingsPending = true;
     settings = { ...requested };
     renderSettings();
 
@@ -214,6 +218,7 @@
     const { saved, applied } = await run;
 
     if (requestId !== settingsRequestId) return false;
+    settingsPending = false;
 
     if (saved && applied) {
       setStatus("Setting saved.", false);
@@ -222,7 +227,7 @@
     } else if (saved) {
       setStatus("Setting saved. Open or reload YouTube to apply it.", true);
     } else {
-      settings = { ...settledSettings };
+      settings = { ...(settledSettings ?? Settings.DEFAULT_SETTINGS) };
       renderSettings();
       setStatus("Couldn't save or apply that setting.", true);
     }
@@ -255,8 +260,11 @@
       e.preventDefault();
       // Only clear the field once the value is accepted, so invalid input is
       // preserved for the user to correct.
-      const applied = await applySpeed(els.customInput.value);
-      if (applied) els.customInput.value = "";
+      const submitted = els.customInput.value;
+      const applied = await applySpeed(submitted);
+      if (applied && els.customInput.value === submitted) {
+        els.customInput.value = "";
+      }
     });
 
     els.reset.addEventListener("click", () => applySpeed(Speed.DEFAULT_SPEED));
@@ -277,6 +285,7 @@
     const onYouTube = tab && isYouTubeUrl(tab.url);
 
     let speed = Speed.DEFAULT_SPEED;
+    let initialSettings = { ...Settings.DEFAULT_SETTINGS };
     try {
       const data = await extensionApi.storage.local.get([
         "speed",
@@ -284,7 +293,7 @@
       ]);
       const stored = Speed.parseSpeed(data && data.speed);
       if (stored !== null) speed = stored;
-      settings = Settings.normalizeSettings(data && data.settings);
+      initialSettings = Settings.normalizeSettings(data && data.settings);
     } catch (_err) {
       // ignore; keep defaults
     }
@@ -294,21 +303,27 @@
       speed = state.speed;
     }
     if (state && state.settings) {
-      settings = Settings.normalizeSettings(state.settings);
+      initialSettings = Settings.normalizeSettings(state.settings);
     }
 
-    render(speed);
-    renderSettings();
-    settledSpeed = currentSpeed;
-    settledSettings = { ...settings };
+    // Supply missing rollback values without replacing successful edits or
+    // rendering over an operation that is still pending.
+    settledSpeed ??= Speed.clampSpeed(speed);
+    settledSettings ??= initialSettings;
+    if (!speedPending) render(settledSpeed);
+    if (!settingsPending) {
+      settings = { ...settledSettings };
+      renderSettings();
+    }
+    if (speedRequestId || settingsRequestId || els.status.textContent) return;
 
     if (!onYouTube) {
       setStatus("Open a YouTube tab to control playback.", true);
     } else if (state && state.isShorts) {
-      setStatus(`Playing at ${Speed.formatSpeed(speed)}.`, false);
+      setStatus(`Selected speed: ${Speed.formatSpeed(speed)}.`, false);
     } else if (state && state.isWatch) {
       if (settings.enableOnWatch) {
-        setStatus(`Playing at ${Speed.formatSpeed(speed)}.`, false);
+        setStatus(`Selected speed: ${Speed.formatSpeed(speed)}.`, false);
       } else {
         setStatus("Enable below to control regular videos.", false);
       }

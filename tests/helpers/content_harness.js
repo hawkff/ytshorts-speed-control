@@ -39,6 +39,12 @@ const contentScriptImports = [
   () => import("../../src/content.js?content-harness=29"),
   () => import("../../src/content.js?content-harness=30"),
   () => import("../../src/content.js?content-harness=31"),
+  () => import("../../src/content.js?content-harness=32"),
+  () => import("../../src/content.js?content-harness=33"),
+  () => import("../../src/content.js?content-harness=34"),
+  () => import("../../src/content.js?content-harness=35"),
+  () => import("../../src/content.js?content-harness=36"),
+  () => import("../../src/content.js?content-harness=37"),
 ];
 
 let nextContentScriptImport = 0;

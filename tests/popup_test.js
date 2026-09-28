@@ -33,7 +33,7 @@ Deno.test("speed: storage and live success report full success", async () => {
 
     assertEquals(env.els["current-speed"].textContent, "2x");
     assertEquals(env.els["custom-input"].value, "");
-    assertEquals(env.status(), { text: "Playing at 2x.", warn: false });
+    assertEquals(env.status(), { text: "Saved 2x.", warn: false });
   } finally {
     env?.restore();
   }
@@ -80,7 +80,7 @@ Deno.test("speed: live-only success keeps state and warns about saving", async (
     assertEquals(env.els["current-speed"].textContent, "2x");
     assertEquals(env.els["custom-input"].value, "");
     assertEquals(env.status(), {
-      text: "Applied for this tab, but couldn't save the speed.",
+      text: "Speed set for this tab, but couldn't save the speed.",
       warn: true,
     });
   } finally {
@@ -243,7 +243,7 @@ Deno.test("speed: overlapping requests are serialized and stale failure cannot t
     await newer;
     assertEquals(env.els["current-speed"].textContent, "3x");
     assertEquals(env.els["custom-input"].value, "");
-    assertEquals(env.status(), { text: "Playing at 3x.", warn: false });
+    assertEquals(env.status(), { text: "Saved 3x.", warn: false });
   } finally {
     env?.restore();
   }
@@ -320,6 +320,198 @@ Deno.test("raw API error details never reach the status line", async () => {
     await env.toggleEnableOnWatch(true);
     assertFalse(env.els["status"].textContent.includes("SENTINEL"));
   } finally {
+    env?.restore();
+  }
+});
+
+Deno.test("popup startup: stale reads preserve accepted edits and rollback values", async () => {
+  for (const delayedRead of ["storage", "state"]) {
+    const initialRead = deferred();
+    const initial = { speed: 1.5, settings: { enableOnWatch: false } };
+    let fail = false;
+    let env;
+    try {
+      env = await startPopup({
+        stored: initial,
+        onStorageGet: () =>
+          delayedRead === "storage" ? initialRead.promise : initial,
+        state: delayedRead === "state" ? initialRead.promise : initial,
+        onStorageSet() {
+          if (fail) throw new Error("storage down");
+        },
+        onOperationMessage() {
+          if (fail) throw new Error("no receiver");
+          return { ok: true };
+        },
+      });
+      await env.submitCustom(2);
+      await env.toggleEnableOnWatch(true);
+      const status = env.status();
+      initialRead.resolve(initial);
+      await env.flush();
+
+      assertEquals(env.els["current-speed"].textContent, "2x", delayedRead);
+      assertEquals(env.els["enable-on-watch"].checked, true, delayedRead);
+      assertEquals(env.status(), status, delayedRead);
+
+      fail = true;
+      await env.submitCustom(3);
+      await env.toggleEnableOnWatch(false);
+      assertEquals(env.els["current-speed"].textContent, "2x", delayedRead);
+      assertEquals(env.els["enable-on-watch"].checked, true, delayedRead);
+    } finally {
+      initialRead.resolve(initial);
+      await env?.flush();
+      env?.restore();
+    }
+  }
+});
+
+Deno.test("popup startup: an edit does not discard the other field's initial value", async () => {
+  for (const edited of ["speed", "settings"]) {
+    const initialRead = deferred();
+    const initial = { speed: 1.5, settings: { enableOnWatch: true } };
+    let env;
+    try {
+      env = await startPopup({ stored: initial, state: initialRead.promise });
+      if (edited === "speed") await env.submitCustom(2);
+      else await env.toggleEnableOnWatch(false);
+      initialRead.resolve(initial);
+      await env.flush();
+
+      assertEquals(
+        env.els["current-speed"].textContent,
+        edited === "speed" ? "2x" : "1.5x",
+      );
+      assertEquals(env.els["enable-on-watch"].checked, edited === "speed");
+    } finally {
+      initialRead.resolve(initial);
+      await env?.flush();
+      env?.restore();
+    }
+  }
+});
+
+Deno.test("popup startup: failed early edits still receive the stored baseline", async () => {
+  const initialRead = deferred();
+  const initial = { speed: 1.5, settings: { enableOnWatch: true } };
+  let env;
+  try {
+    env = await startPopup({
+      stored: initial,
+      state: initialRead.promise,
+      onStorageSet() {
+        throw new Error("storage down");
+      },
+      onOperationMessage() {
+        throw new Error("no receiver");
+      },
+    });
+    await env.submitCustom(2);
+    await env.toggleEnableOnWatch(false);
+    const status = env.status();
+    initialRead.resolve(initial);
+    await env.flush();
+
+    assertEquals(env.els["current-speed"].textContent, "1.5x");
+    assertEquals(env.els["enable-on-watch"].checked, true);
+    assertEquals(env.status(), status);
+    assertEquals(env.status().warn, true);
+  } finally {
+    initialRead.resolve(initial);
+    await env?.flush();
+    env?.restore();
+  }
+});
+
+Deno.test("popup startup: pending edits survive initialization and settle correctly", async () => {
+  for (const fail of [false, true]) {
+    const initialRead = deferred();
+    const pendingSave = deferred();
+    const initial = { speed: 1.5, settings: { enableOnWatch: true } };
+    let env;
+    try {
+      env = await startPopup({
+        stored: initial,
+        state: initialRead.promise,
+        async onStorageSet() {
+          await pendingSave.promise;
+          if (fail) throw new Error("storage down");
+        },
+        onOperationMessage() {
+          if (fail) throw new Error("no receiver");
+          return { ok: true };
+        },
+      });
+      const submitted = env.submitCustom(2);
+      const toggled = env.toggleEnableOnWatch(false);
+      initialRead.resolve(initial);
+      await env.flush();
+      assertEquals(env.els["current-speed"].textContent, "2x");
+      assertEquals(env.els["enable-on-watch"].checked, false);
+
+      pendingSave.resolve();
+      await Promise.all([submitted, toggled]);
+      assertEquals(env.els["current-speed"].textContent, fail ? "1.5x" : "2x");
+      assertEquals(env.els["enable-on-watch"].checked, fail);
+    } finally {
+      initialRead.resolve(initial);
+      pendingSave.resolve();
+      await env?.flush();
+      env?.restore();
+    }
+  }
+});
+
+Deno.test("speed status: inactive watch pages report saving, not playback", async () => {
+  let env;
+  try {
+    env = await startPopup({
+      tab: { id: 1, url: "https://www.youtube.com/watch?v=example" },
+      state: {
+        speed: 1,
+        isWatch: true,
+        isActive: false,
+        settings: { enableOnWatch: false },
+      },
+    });
+    await env.submitCustom(2);
+    assertEquals(env.status(), { text: "Saved 2x.", warn: false });
+    assertEquals(env.els["enable-on-watch"].checked, false);
+  } finally {
+    env?.restore();
+  }
+});
+
+Deno.test("speed status: startup does not claim playback when no video exists", async () => {
+  let env;
+  try {
+    env = await startPopup({
+      state: { speed: 2, isShorts: true, isActive: true, hasVideo: false },
+    });
+    assertEquals(env.status(), { text: "Selected speed: 2x.", warn: false });
+  } finally {
+    env?.restore();
+  }
+});
+
+Deno.test("custom draft: successful submission preserves newly typed text", async () => {
+  let pendingSave = deferred();
+  let env;
+  try {
+    env = await startPopup({ onStorageSet: () => pendingSave.promise });
+    for (const draft of ["3", "2.00"]) {
+      pendingSave = deferred();
+      const submitted = env.submitCustom(2);
+      await env.flush();
+      env.els["custom-input"].value = draft;
+      pendingSave.resolve();
+      await submitted;
+      assertEquals(env.els["custom-input"].value, draft);
+    }
+  } finally {
+    pendingSave.resolve();
+    await env?.flush();
     env?.restore();
   }
 });

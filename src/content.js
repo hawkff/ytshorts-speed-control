@@ -152,6 +152,7 @@
    * @param {HTMLVideoElement | null} video
    */
   function applySpeedTo(video) {
+    if (!isActivePage()) return releaseVideoAtDefaultRate();
     if (!video) return;
     // Never write playbackRate into a paused video. Rates above YouTube's
     // native 2x maximum make its player re-sync (reset the rate and call
@@ -172,7 +173,7 @@
 
   /** Re-apply to whatever the active video currently is. */
   function reapply() {
-    if (!isActivePage()) return;
+    if (!isActivePage()) return releaseVideoAtDefaultRate();
     const video = findActiveVideo();
     if (video && video !== managedVideo) {
       attachTo(video);
@@ -207,6 +208,7 @@
    * deactivation, navigating to an inactive route).
    */
   function releaseVideoAtDefaultRate() {
+    releasePause();
     if (!managedVideo) return;
     const video = managedVideo;
     detach();
@@ -222,10 +224,9 @@
   function onRateChange() {
     if (!managedVideo) return;
     const target = Speed.clampSpeed(desiredSpeed);
-    // If the rate already matches our target, this event came from our own
-    // write (or is a no-op) and needs no action. Otherwise YouTube or the user
-    // changed it, so reassert our chosen speed.
-    if (ratesEqual(managedVideo.playbackRate, target)) return;
+    // Matching rates are a no-op on active pages; inactive pages still need
+    // teardown even if the rate has not changed.
+    if (isActivePage() && ratesEqual(managedVideo.playbackRate, target)) return;
     applySpeedTo(managedVideo);
   }
 
@@ -410,6 +411,7 @@
   /** Re-pause the video YouTube is trying to auto-resume, within the window. */
   function reassertPause() {
     if (!pausedVideo) return;
+    if (!isActivePage()) return releaseVideoAtDefaultRate();
     if (Date.now() > pauseEnforceUntil) {
       releasePause();
       return;
@@ -433,19 +435,8 @@
     const tick = () => {
       // This callback has fired; its handle is no longer pending.
       pauseSweepTimer = null;
-      if (!pausedVideo) return;
-      if (Date.now() > pauseEnforceUntil) {
-        releasePause();
-        return;
-      }
-      if (!pausedVideo.paused) {
-        try {
-          pausedVideo.pause();
-        } catch (_err) {
-          // ignore
-        }
-      }
-      pauseSweepTimer = setTimeout(tick, 100);
+      reassertPause();
+      if (pausedVideo) pauseSweepTimer = setTimeout(tick, 100);
     };
     pauseSweepTimer = setTimeout(tick, 100);
   }
@@ -459,7 +450,7 @@
   function reconcileAfterSettings(wasActive) {
     if (isActivePage()) {
       reapply();
-    } else if (wasActive && managedVideo) {
+    } else if (wasActive) {
       // Just deactivated on this page: release control and reset to 1x.
       releaseVideoAtDefaultRate();
     }
@@ -579,21 +570,6 @@
         sendResponse({ ok: true, speed: desiredSpeed });
         return true;
       }
-      case "STEP_UP": {
-        setSpeed(Speed.adjustSpeed(desiredSpeed, KEYBOARD_STEP));
-        sendResponse({ ok: true, speed: desiredSpeed });
-        return true;
-      }
-      case "STEP_DOWN": {
-        setSpeed(Speed.adjustSpeed(desiredSpeed, -KEYBOARD_STEP));
-        sendResponse({ ok: true, speed: desiredSpeed });
-        return true;
-      }
-      case "RESET": {
-        setSpeed(Speed.DEFAULT_SPEED);
-        sendResponse({ ok: true, speed: desiredSpeed });
-        return true;
-      }
       default:
         return undefined;
     }
@@ -636,14 +612,17 @@
     // Identify the intended action. Match on e.key (the produced character)
     // first, then fall back to e.code (physical key position) so layouts where
     // [ and ] sit elsewhere, or require AltGr, still work.
+    const key = ["]", "[", "Backspace", "p", "P"].includes(e.key)
+      ? e.key
+      : e.code;
     let action = null;
-    if (e.key === "]" || e.code === "BracketRight") {
+    if (key === "]" || key === "BracketRight") {
       action = "up";
-    } else if (e.key === "[" || e.code === "BracketLeft") {
+    } else if (key === "[" || key === "BracketLeft") {
       action = "down";
-    } else if (e.key === "Backspace" || e.code === "Backspace") {
+    } else if (key === "Backspace") {
       action = "reset";
-    } else if (e.key === "p" || e.key === "P" || e.code === "KeyP") {
+    } else if (key === "p" || key === "P" || key === "KeyP") {
       action = "pause";
     } else {
       return; // not ours; let the page handle it
@@ -726,7 +705,7 @@
       scheduledRaf = false;
       // The page may have become inactive between scheduling and this frame
       // (SPA navigation); re-check the policy boundary before scanning.
-      if (!isActivePage()) return;
+      if (!isActivePage()) return releaseVideoAtDefaultRate();
       const active = findActiveVideo();
       if (active && active !== managedVideo) reapply();
     };
