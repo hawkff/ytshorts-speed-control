@@ -151,6 +151,7 @@ function createFakeElement(tagName = "div") {
  * - `tab`: active tab (default a YouTube Shorts tab); pass `null` for none.
  * - `stored`: object resolved by the bootstrap storage.local.get.
  * - `storageGetError`: reject the bootstrap storage.local.get.
+ * - `onStorageGet(keys)`: override the startup read, including delayed results.
  * - `state`: GET_STATE response; when omitted GET_STATE rejects (no content
  *   script), which the popup treats as "no live page".
  * - `onStorageSet(value, call)`: outcome for each storage.local.set call
@@ -226,6 +227,9 @@ export async function startPopup(options = {}) {
           if (options.storageGetError) {
             return Promise.reject(new Error("storage get failed"));
           }
+          if (options.onStorageGet) {
+            return Promise.resolve().then(() => options.onStorageGet(keys));
+          }
           return Promise.resolve({ ...(options.stored ?? {}) });
         },
         set(value) {
@@ -297,8 +301,7 @@ export async function startPopup(options = {}) {
 
   try {
     await importPopup();
-    // Bootstrap runs synchronously at import (readyState "complete") and only
-    // awaits immediately-resolving fakes; drain it before exposing controls.
+    // Drain startup unless a test deliberately holds an API response pending.
     await flush();
   } catch (error) {
     restoreDescriptors();

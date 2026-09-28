@@ -742,3 +742,145 @@ Deno.test("navigating between Shorts keeps the chosen speed", async () => {
     await env?.restore();
   }
 });
+
+Deno.test("pause opt-out: settings changes remove pause enforcement", async () => {
+  for (const source of ["message", "storage", "removed"]) {
+    const video = createFakeVideo({ paused: false });
+    let env;
+    try {
+      env = await startContentScript({
+        pathname: "/watch",
+        href: "https://www.youtube.com/watch?v=example",
+        videos: [video],
+        stored: { speed: 3, settings: { enableOnWatch: true } },
+      });
+      await env.ready;
+      env.dispatchKey({ key: "p", code: "KeyP" });
+      assertEquals(pauseSweepTimers(env).length, 1);
+
+      if (source === "message") {
+        env.sendMessage({
+          type: "SET_SETTINGS",
+          settings: { enableOnWatch: false },
+        });
+      } else {
+        env.emitStorageChange({
+          settings: {
+            oldValue: { enableOnWatch: true },
+            newValue: source === "removed"
+              ? undefined
+              : { enableOnWatch: false },
+          },
+        });
+        assertEquals(env.storageWrites, []);
+      }
+
+      assertEquals(video.paused, true, source);
+      assertEquals(video.playbackRate, 1, source);
+      assertEquals(pauseSweepTimers(env).length, 0, source);
+      for (const timer of env.pendingTimers) {
+        if (timer.kind === "timeout" && timer.delay === 0) {
+          env.runTimer(timer.handle);
+        }
+      }
+      await video.play();
+      video.emit("play");
+      video.emit("playing");
+      assertEquals(video.paused, false, source);
+      assertEquals(video.pauseCalls, 1, source);
+      assertEquals(pauseSweepTimers(env).length, 0, source);
+    } finally {
+      await env?.restore();
+    }
+  }
+});
+
+Deno.test("inactive fallback: polling and media callbacks release control without scanning", async () => {
+  for (
+    const trigger of [
+      "interval",
+      "ratechange",
+      "matching-ratechange",
+      "play",
+      "pause-play",
+      "pause-playing",
+      "pause-sweep",
+      "frame",
+    ]
+  ) {
+    const video = createFakeVideo({ paused: false });
+    let env;
+    try {
+      env = await startContentScript({ videos: [video], stored: { speed: 2 } });
+      await env.ready;
+      if (trigger.startsWith("pause-")) {
+        env.dispatchKey({ key: "p", code: "KeyP" });
+      }
+      if (trigger === "frame") env.triggerMutation();
+      const baseline = env.queryCount;
+      const interval = env.pendingTimers.find((timer) =>
+        timer.kind === "interval"
+      );
+      env.location.pathname = "/";
+      env.location.href = "https://www.youtube.com/";
+
+      if (trigger === "interval") env.runTimer(interval.handle);
+      else if (trigger === "frame") await env.flushAnimationFrames();
+      else if (trigger === "pause-sweep") {
+        env.runTimer(pauseSweepTimers(env)[0].handle);
+        assertEquals(video.paused, true);
+      } else {
+        if (trigger === "ratechange") video.playbackRate = 1.25;
+        if (trigger.startsWith("pause-")) await video.play();
+        video.emit(trigger.replace(/^(pause-|matching-)/, ""));
+        assertEquals(video.paused, false, trigger);
+      }
+
+      assertEquals(video.playbackRate, 1, trigger);
+      assertEquals(pauseSweepTimers(env).length, 0, trigger);
+      assertEquals(env.queryCount, baseline, trigger);
+      video.playbackRate = 1.25;
+      video.emit("ratechange");
+      await video.play();
+      video.emit("play");
+      video.emit("playing");
+      const writes = video.rateWrites.length;
+      env.runTimer(interval.handle);
+      assertEquals(video.rateWrites.length, writes, trigger);
+      assertEquals(video.playbackRate, 1.25, trigger);
+      assertEquals(video.paused, false, trigger);
+      assertEquals(env.queryCount, baseline, trigger);
+      assertEquals(env.storageWrites, [], trigger);
+      assertEquals(env.sendMessage({ type: "GET_STATE" }).speed, 2, trigger);
+    } finally {
+      await env?.restore();
+    }
+  }
+});
+
+Deno.test("shortcut precedence: characters win over conflicting physical keys", async () => {
+  const video = createFakeVideo({ paused: false });
+  let env;
+  try {
+    env = await startContentScript({ videos: [video], stored: { speed: 2 } });
+    await env.ready;
+    for (
+      const [key, code, expected] of [
+        ["[", "BracketRight", 1.75],
+        ["]", "BracketLeft", 2.25],
+        ["Backspace", "BracketRight", 1],
+        ["x", "BracketLeft", 1.75],
+      ]
+    ) {
+      env.sendMessage({ type: "SET_SPEED", value: 2 });
+      const event = env.dispatchKey({ key, code });
+      assertEquals(event.defaultPrevented, true);
+      assertEquals(video.playbackRate, expected, `${key} / ${code}`);
+    }
+    env.dispatchKey({ key: "p", code: "BracketRight" });
+    assertEquals(video.paused, true);
+    assertEquals(video.playbackRate, 1.75);
+  } finally {
+    await env?.restore();
+  }
+});

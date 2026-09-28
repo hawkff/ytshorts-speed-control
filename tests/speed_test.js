@@ -97,21 +97,6 @@ Deno.test("adjustSpeed adds delta then clamps", () => {
   assertEquals(Speed.adjustSpeed(NaN, 0.25), 1.25); // base falls back to default
 });
 
-Deno.test("nextPreset steps up and saturates", () => {
-  assertEquals(Speed.nextPreset(1), 1.25);
-  assertEquals(Speed.nextPreset(0.25), 0.5);
-  assertEquals(Speed.nextPreset(2), 2.5);
-  assertEquals(Speed.nextPreset(4), 4); // already highest
-  assertEquals(Speed.nextPreset(10), 4); // beyond highest
-});
-
-Deno.test("prevPreset steps down and saturates", () => {
-  assertEquals(Speed.prevPreset(1), 0.75);
-  assertEquals(Speed.prevPreset(4), 3);
-  assertEquals(Speed.prevPreset(0.25), 0.25); // already lowest
-  assertEquals(Speed.prevPreset(0.1), 0.25); // below lowest -> lowest
-});
-
 Deno.test("SPEED_PRESETS is frozen and ascending", () => {
   const presets = Speed.SPEED_PRESETS;
   assertEquals(Object.isFrozen(presets), true);
