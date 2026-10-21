@@ -1,0 +1,3 @@
+[test]
+# macOS writes ._* metadata files on non-Apple volumes; they match *_test.js.
+pathIgnorePatterns = ["**/._*"]

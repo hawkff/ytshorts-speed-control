@@ -8,34 +8,9 @@
 import "../../lib/speed.js";
 import "../../lib/settings.js";
 
-const popupImports = [
-  () => import("../../src/popup.js?popup-harness=0"),
-  () => import("../../src/popup.js?popup-harness=1"),
-  () => import("../../src/popup.js?popup-harness=2"),
-  () => import("../../src/popup.js?popup-harness=3"),
-  () => import("../../src/popup.js?popup-harness=4"),
-  () => import("../../src/popup.js?popup-harness=5"),
-  () => import("../../src/popup.js?popup-harness=6"),
-  () => import("../../src/popup.js?popup-harness=7"),
-  () => import("../../src/popup.js?popup-harness=8"),
-  () => import("../../src/popup.js?popup-harness=9"),
-  () => import("../../src/popup.js?popup-harness=10"),
-  () => import("../../src/popup.js?popup-harness=11"),
-  () => import("../../src/popup.js?popup-harness=12"),
-  () => import("../../src/popup.js?popup-harness=13"),
-  () => import("../../src/popup.js?popup-harness=14"),
-  () => import("../../src/popup.js?popup-harness=15"),
-  () => import("../../src/popup.js?popup-harness=16"),
-  () => import("../../src/popup.js?popup-harness=17"),
-  () => import("../../src/popup.js?popup-harness=18"),
-  () => import("../../src/popup.js?popup-harness=19"),
-  () => import("../../src/popup.js?popup-harness=20"),
-  () => import("../../src/popup.js?popup-harness=21"),
-  () => import("../../src/popup.js?popup-harness=22"),
-  () => import("../../src/popup.js?popup-harness=23"),
-];
-
-let nextPopupImport = 0;
+// Each start imports the script under a new query string, which makes the
+// module loader evaluate a fresh copy, like opening the popup.
+let popupRuns = 0;
 
 /** Create a manually-settled promise for scripting async outcomes. */
 export function deferred() {
@@ -118,7 +93,10 @@ function createFakeElement(tagName = "div") {
     },
     removeEventListener(type, listener) {
       const entries = listeners.get(type) ?? [];
-      listeners.set(type, entries.filter((entry) => entry !== listener));
+      listeners.set(
+        type,
+        entries.filter((entry) => entry !== listener),
+      );
     },
     /**
      * Fire an event and await every (possibly async) handler. Callers that
@@ -142,10 +120,6 @@ function createFakeElement(tagName = "div") {
 
 /**
  * Run a fresh instance of the real popup script.
- *
- * Deno only grants permission-free access to dynamic imports it can see in
- * the static module graph, hence the bounded literal import list above: each
- * start consumes one unique query-token module.
  *
  * Options:
  * - `tab`: active tab (default a YouTube Shorts tab); pass `null` for none.
@@ -182,17 +156,18 @@ export async function startPopup(options = {}) {
       id === "slider" || id === "custom-input" || id === "enable-on-watch"
         ? "input"
         : id === "custom-form"
-        ? "form"
-        : "div",
+          ? "form"
+          : "div",
     );
   }
   // Mirror the slider bounds from popup.html; render() reads them.
-  els["slider"].min = "0.25";
-  els["slider"].max = "4";
+  els.slider.min = "0.25";
+  els.slider.max = "4";
 
-  const tab = "tab" in options
-    ? options.tab
-    : { id: 1, url: "https://www.youtube.com/shorts/example" };
+  const tab =
+    "tab" in options
+      ? options.tab
+      : { id: 1, url: "https://www.youtube.com/shorts/example" };
 
   let setCalls = 0;
   let messageCalls = 0;
@@ -214,7 +189,7 @@ export async function startPopup(options = {}) {
         if (options.onOperationMessage) {
           const call = messageCalls;
           return Promise.resolve().then(() =>
-            options.onOperationMessage(message, call)
+            options.onOperationMessage(message, call),
           );
         }
         return Promise.resolve({ ok: true });
@@ -238,7 +213,7 @@ export async function startPopup(options = {}) {
           if (options.onStorageSet) {
             const call = setCalls;
             return Promise.resolve().then(() =>
-              options.onStorageSet(value, call)
+              options.onStorageSet(value, call),
             );
           }
           return Promise.resolve();
@@ -293,14 +268,8 @@ export async function startPopup(options = {}) {
     for (let i = 0; i < turns; i++) await Promise.resolve();
   }
 
-  const importPopup = popupImports[nextPopupImport++];
-  if (!importPopup) {
-    restoreDescriptors();
-    throw new Error("popup harness literal import pool exhausted");
-  }
-
   try {
-    await importPopup();
+    await import(`../../src/popup.js?run=${++popupRuns}`);
     // Drain startup unless a test deliberately holds an API response pending.
     await flush();
   } catch (error) {
@@ -313,7 +282,7 @@ export async function startPopup(options = {}) {
     calls,
     flush,
     presetButtons() {
-      return els["presets"].querySelectorAll(".preset-btn");
+      return els.presets.querySelectorAll(".preset-btn");
     },
     /** Click a preset button; returns the handler completion promise. */
     clickPreset(speed) {
@@ -334,12 +303,12 @@ export async function startPopup(options = {}) {
       return els["enable-on-watch"].dispatch("change");
     },
     clickReset() {
-      return els["reset"].click();
+      return els.reset.click();
     },
     status() {
       return {
-        text: els["status"].textContent,
-        warn: els["status"].classList.contains("warn"),
+        text: els.status.textContent,
+        warn: els.status.classList.contains("warn"),
       };
     },
     restore() {

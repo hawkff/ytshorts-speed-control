@@ -1,10 +1,11 @@
-import { assertEquals } from "@std/assert";
+import { test } from "bun:test";
+import assert from "node:assert/strict";
 import {
   createFakeVideo,
   startContentScript,
 } from "./helpers/content_harness.js";
 
-Deno.test("stored speed is applied to a playing video after init", async () => {
+test("stored speed is applied to a playing video after init", async () => {
   const video = createFakeVideo({
     paused: false,
     currentSrc: "https://example.test/smoke.mp4",
@@ -19,14 +20,14 @@ Deno.test("stored speed is applied to a playing video after init", async () => {
     });
     await env.ready;
 
-    assertEquals(video.playbackRate, 2);
-    assertEquals(video.rateWrites, [2]);
+    assert.deepEqual(video.playbackRate, 2);
+    assert.deepEqual(video.rateWrites, [2]);
   } finally {
     await env?.restore();
   }
 });
 
-Deno.test("visible video wins over an earlier off-screen playing video", async () => {
+test("visible video wins over an earlier off-screen playing video", async () => {
   const offscreen = createFakeVideo({
     paused: false,
     currentSrc: "https://example.test/offscreen.mp4",
@@ -45,14 +46,14 @@ Deno.test("visible video wins over an earlier off-screen playing video", async (
     });
     await env.ready;
 
-    assertEquals(offscreen.rateWrites, []);
-    assertEquals(visible.rateWrites, [2]);
+    assert.deepEqual(offscreen.rateWrites, []);
+    assert.deepEqual(visible.rateWrites, [2]);
   } finally {
     await env?.restore();
   }
 });
 
-Deno.test("largest qualifying visible video wins", async () => {
+test("largest qualifying visible video wins", async () => {
   const smaller = createFakeVideo({
     paused: false,
     currentSrc: "https://example.test/smaller.mp4",
@@ -71,14 +72,14 @@ Deno.test("largest qualifying visible video wins", async () => {
     });
     await env.ready;
 
-    assertEquals(smaller.rateWrites, []);
-    assertEquals(larger.rateWrites, [2]);
+    assert.deepEqual(smaller.rateWrites, []);
+    assert.deepEqual(larger.rateWrites, [2]);
   } finally {
     await env?.restore();
   }
 });
 
-Deno.test("zero-layout videos fall back to genuinely playing before sourced", async () => {
+test("zero-layout videos fall back to genuinely playing before sourced", async () => {
   const sourced = createFakeVideo({
     paused: true,
     currentSrc: "https://example.test/sourced.mp4",
@@ -95,14 +96,14 @@ Deno.test("zero-layout videos fall back to genuinely playing before sourced", as
     });
     await env.ready;
 
-    assertEquals(sourced.rateWrites, []);
-    assertEquals(playing.rateWrites, [2]);
+    assert.deepEqual(sourced.rateWrites, []);
+    assert.deepEqual(playing.rateWrites, [2]);
   } finally {
     await env?.restore();
   }
 });
 
-Deno.test("popup updates during startup beat the older storage snapshot", async () => {
+test("popup updates during startup beat the older storage snapshot", async () => {
   const video = createFakeVideo({
     paused: false,
     currentSrc: "https://example.test/watch.mp4",
@@ -119,12 +120,12 @@ Deno.test("popup updates during startup beat the older storage snapshot", async 
     await env.listenersReady;
 
     const speedResponse = env.sendMessage({ type: "SET_SPEED", value: 2 });
-    assertEquals(speedResponse, { ok: true, speed: 2 });
+    assert.deepEqual(speedResponse, { ok: true, speed: 2 });
     const settingsResponse = env.sendMessage({
       type: "SET_SETTINGS",
       settings: { enableOnWatch: true },
     });
-    assertEquals(settingsResponse.ok, true);
+    assert.deepEqual(settingsResponse.ok, true);
 
     // The pending init read now resolves with older values; they must not
     // clobber the newer live state above.
@@ -135,15 +136,15 @@ Deno.test("popup updates during startup beat the older storage snapshot", async 
     await env.ready;
 
     const state = env.sendMessage({ type: "GET_STATE" });
-    assertEquals(state.speed, 2);
-    assertEquals(state.settings.enableOnWatch, true);
-    assertEquals(state.isActive, true);
+    assert.deepEqual(state.speed, 2);
+    assert.deepEqual(state.settings.enableOnWatch, true);
+    assert.deepEqual(state.isActive, true);
   } finally {
     await env?.restore();
   }
 });
 
-Deno.test("storage speed event equal to the default supersedes the snapshot", async () => {
+test("storage speed event equal to the default supersedes the snapshot", async () => {
   const video = createFakeVideo({
     paused: false,
     currentSrc: "https://example.test/equal.mp4",
@@ -163,13 +164,13 @@ Deno.test("storage speed event equal to the default supersedes the snapshot", as
     await env.ready;
 
     const state = env.sendMessage({ type: "GET_STATE" });
-    assertEquals(state.speed, 1);
+    assert.deepEqual(state.speed, 1);
   } finally {
     await env?.restore();
   }
 });
 
-Deno.test("mutations on an inactive route queue no frame and no scan", async () => {
+test("mutations on an inactive route queue no frame and no scan", async () => {
   const video = createFakeVideo({
     paused: false,
     currentSrc: "https://example.test/home.mp4",
@@ -189,15 +190,15 @@ Deno.test("mutations on an inactive route queue no frame and no scan", async () 
     env.triggerMutation();
     env.triggerMutation();
 
-    assertEquals(env.queryCount, baseline);
-    assertEquals(env.pendingAnimationFrames, 0);
-    assertEquals(video.rateWrites, []);
+    assert.deepEqual(env.queryCount, baseline);
+    assert.deepEqual(env.pendingAnimationFrames, 0);
+    assert.deepEqual(video.rateWrites, []);
   } finally {
     await env?.restore();
   }
 });
 
-Deno.test("active-page mutation bursts coalesce into one frame and one scan", async () => {
+test("active-page mutation bursts coalesce into one frame and one scan", async () => {
   const video = createFakeVideo({
     paused: false,
     currentSrc: "https://example.test/short.mp4",
@@ -214,18 +215,18 @@ Deno.test("active-page mutation bursts coalesce into one frame and one scan", as
     env.triggerMutation();
     env.triggerMutation();
     env.triggerMutation();
-    assertEquals(env.pendingAnimationFrames, 1);
+    assert.deepEqual(env.pendingAnimationFrames, 1);
 
     const baseline = env.queryCount;
     await env.flushAnimationFrames();
 
-    assertEquals(env.queryCount, baseline + 1);
+    assert.deepEqual(env.queryCount, baseline + 1);
   } finally {
     await env?.restore();
   }
 });
 
-Deno.test("a queued frame re-checks activity before scanning", async () => {
+test("a queued frame re-checks activity before scanning", async () => {
   const video = createFakeVideo({
     paused: false,
     currentSrc: "https://example.test/short.mp4",
@@ -240,7 +241,7 @@ Deno.test("a queued frame re-checks activity before scanning", async () => {
     await env.ready;
 
     env.triggerMutation();
-    assertEquals(env.pendingAnimationFrames, 1);
+    assert.deepEqual(env.pendingAnimationFrames, 1);
 
     // The route becomes inactive before the frame fires, with no further
     // mutation to re-route through the URL-change branch.
@@ -249,13 +250,13 @@ Deno.test("a queued frame re-checks activity before scanning", async () => {
     const baseline = env.queryCount;
     await env.flushAnimationFrames();
 
-    assertEquals(env.queryCount, baseline);
+    assert.deepEqual(env.queryCount, baseline);
   } finally {
     await env?.restore();
   }
 });
 
-Deno.test("enabling watch via settings applies speed without DOM churn", async () => {
+test("enabling watch via settings applies speed without DOM churn", async () => {
   const video = createFakeVideo({
     paused: false,
     currentSrc: "https://example.test/watch.mp4",
@@ -270,17 +271,17 @@ Deno.test("enabling watch via settings applies speed without DOM churn", async (
       stored: { speed: 2, settings: { enableOnWatch: false } },
     });
     await env.ready;
-    assertEquals(video.rateWrites, []);
+    assert.deepEqual(video.rateWrites, []);
 
     const response = env.sendMessage({
       type: "SET_SETTINGS",
       settings: { enableOnWatch: true },
     });
-    assertEquals(response.ok, true);
+    assert.deepEqual(response.ok, true);
 
     // No mutation or animation frame needed: activation applies directly.
-    assertEquals(video.playbackRate, 2);
-    assertEquals(video.rateWrites, [2]);
+    assert.deepEqual(video.playbackRate, 2);
+    assert.deepEqual(video.rateWrites, [2]);
   } finally {
     await env?.restore();
   }
@@ -293,7 +294,7 @@ function pauseSweepTimers(env) {
   );
 }
 
-Deno.test("releasing a pause cancels the pending sweep timer", async () => {
+test("releasing a pause cancels the pending sweep timer", async () => {
   const video = createFakeVideo({
     paused: false,
     currentSrc: "https://example.test/pause.mp4",
@@ -306,20 +307,20 @@ Deno.test("releasing a pause cancels the pending sweep timer", async () => {
     await env.ready;
 
     env.dispatchKey({ key: "p", code: "KeyP" });
-    assertEquals(video.pauseCalls, 1);
-    assertEquals(pauseSweepTimers(env).length, 1);
+    assert.deepEqual(video.pauseCalls, 1);
+    assert.deepEqual(pauseSweepTimers(env).length, 1);
 
     // P again resumes playback; releasePause must cancel the pending sweep
     // so the stale callback can never fire or enqueue a successor.
     env.dispatchKey({ key: "p", code: "KeyP" });
-    assertEquals(video.playCalls, 1);
-    assertEquals(pauseSweepTimers(env).length, 0);
+    assert.deepEqual(video.playCalls, 1);
+    assert.deepEqual(pauseSweepTimers(env).length, 0);
   } finally {
     await env?.restore();
   }
 });
 
-Deno.test("rapid re-pause keeps exactly one sweep chain", async () => {
+test("rapid re-pause keeps exactly one sweep chain", async () => {
   const video = createFakeVideo({
     paused: false,
     currentSrc: "https://example.test/repause.mp4",
@@ -335,21 +336,21 @@ Deno.test("rapid re-pause keeps exactly one sweep chain", async () => {
     env.dispatchKey({ key: "p", code: "KeyP" });
     env.dispatchKey({ key: "p", code: "KeyP" });
     env.dispatchKey({ key: "p", code: "KeyP" });
-    assertEquals(video.pauseCalls, 2);
+    assert.deepEqual(video.pauseCalls, 2);
 
     const sweeps = pauseSweepTimers(env);
-    assertEquals(sweeps.length, 1);
+    assert.deepEqual(sweeps.length, 1);
 
     // Flushing the one sweep tick must enqueue exactly one successor, not a
     // second chain from the pre-play pause.
     env.runTimer(sweeps[0].handle);
-    assertEquals(pauseSweepTimers(env).length, 1);
+    assert.deepEqual(pauseSweepTimers(env).length, 1);
   } finally {
     await env?.restore();
   }
 });
 
-Deno.test("navigation releases the pause and cancels the sweep", async () => {
+test("navigation releases the pause and cancels the sweep", async () => {
   const video = createFakeVideo({
     paused: false,
     currentSrc: "https://example.test/navigate.mp4",
@@ -362,18 +363,18 @@ Deno.test("navigation releases the pause and cancels the sweep", async () => {
     await env.ready;
 
     env.dispatchKey({ key: "p", code: "KeyP" });
-    assertEquals(pauseSweepTimers(env).length, 1);
+    assert.deepEqual(pauseSweepTimers(env).length, 1);
 
     // The real SPA navigation handler must release the pause intent and
     // cancel the pending sweep along with it.
     env.dispatchGlobalEvent("yt-navigate-finish");
-    assertEquals(pauseSweepTimers(env).length, 0);
+    assert.deepEqual(pauseSweepTimers(env).length, 0);
   } finally {
     await env?.restore();
   }
 });
 
-Deno.test("P and speed target the same visible video", async () => {
+test("P and speed target the same visible video", async () => {
   const offscreen = createFakeVideo({
     paused: false,
     currentSrc: "https://example.test/offscreen.mp4",
@@ -395,16 +396,16 @@ Deno.test("P and speed target the same visible video", async () => {
     await env.ready;
     env.dispatchKey({ key: "p", code: "KeyP" });
 
-    assertEquals(offscreen.rateWrites, []);
-    assertEquals(visible.rateWrites, [2]);
-    assertEquals(offscreen.pauseCalls, 0);
-    assertEquals(visible.pauseCalls, 1);
+    assert.deepEqual(offscreen.rateWrites, []);
+    assert.deepEqual(visible.rateWrites, [2]);
+    assert.deepEqual(offscreen.pauseCalls, 0);
+    assert.deepEqual(visible.pauseCalls, 1);
   } finally {
     await env?.restore();
   }
 });
 
-Deno.test("] steps the speed up and persists it", async () => {
+test("] steps the speed up and persists it", async () => {
   const video = createFakeVideo({
     paused: false,
     currentSrc: "https://example.test/up.mp4",
@@ -417,10 +418,10 @@ Deno.test("] steps the speed up and persists it", async () => {
 
     const event = env.dispatchKey({ key: "]", code: "BracketRight" });
 
-    assertEquals(event.defaultPrevented, true);
-    assertEquals(video.playbackRate, 2.25);
-    assertEquals(video.rateWrites[video.rateWrites.length - 1], 2.25);
-    assertEquals(
+    assert.deepEqual(event.defaultPrevented, true);
+    assert.deepEqual(video.playbackRate, 2.25);
+    assert.deepEqual(video.rateWrites[video.rateWrites.length - 1], 2.25);
+    assert.deepEqual(
       env.storageWrites.some((write) => write.speed === 2.25),
       true,
     );
@@ -429,7 +430,7 @@ Deno.test("] steps the speed up and persists it", async () => {
   }
 });
 
-Deno.test("[ steps the speed down and persists it", async () => {
+test("[ steps the speed down and persists it", async () => {
   const video = createFakeVideo({
     paused: false,
     currentSrc: "https://example.test/down.mp4",
@@ -442,10 +443,10 @@ Deno.test("[ steps the speed down and persists it", async () => {
 
     const event = env.dispatchKey({ key: "[", code: "BracketLeft" });
 
-    assertEquals(event.defaultPrevented, true);
-    assertEquals(video.playbackRate, 1.75);
-    assertEquals(video.rateWrites[video.rateWrites.length - 1], 1.75);
-    assertEquals(
+    assert.deepEqual(event.defaultPrevented, true);
+    assert.deepEqual(video.playbackRate, 1.75);
+    assert.deepEqual(video.rateWrites[video.rateWrites.length - 1], 1.75);
+    assert.deepEqual(
       env.storageWrites.some((write) => write.speed === 1.75),
       true,
     );
@@ -454,7 +455,7 @@ Deno.test("[ steps the speed down and persists it", async () => {
   }
 });
 
-Deno.test("Backspace resets the speed to 1x", async () => {
+test("Backspace resets the speed to 1x", async () => {
   const video = createFakeVideo({
     paused: false,
     currentSrc: "https://example.test/reset.mp4",
@@ -467,9 +468,9 @@ Deno.test("Backspace resets the speed to 1x", async () => {
 
     const event = env.dispatchKey({ key: "Backspace", code: "Backspace" });
 
-    assertEquals(event.defaultPrevented, true);
-    assertEquals(video.playbackRate, 1);
-    assertEquals(
+    assert.deepEqual(event.defaultPrevented, true);
+    assert.deepEqual(video.playbackRate, 1);
+    assert.deepEqual(
       env.storageWrites.some((write) => write.speed === 1),
       true,
     );
@@ -478,7 +479,7 @@ Deno.test("Backspace resets the speed to 1x", async () => {
   }
 });
 
-Deno.test("modified combos are left to the browser", async () => {
+test("modified combos are left to the browser", async () => {
   const video = createFakeVideo({
     paused: false,
     currentSrc: "https://example.test/modified.mp4",
@@ -496,10 +497,10 @@ Deno.test("modified combos are left to the browser", async () => {
     ];
 
     for (const event of events) {
-      assertEquals(event.defaultPrevented, false);
+      assert.deepEqual(event.defaultPrevented, false);
     }
-    assertEquals(video.rateWrites, [2]);
-    assertEquals(
+    assert.deepEqual(video.rateWrites, [2]);
+    assert.deepEqual(
       env.storageWrites.some((write) => "speed" in write),
       false,
     );
@@ -508,7 +509,7 @@ Deno.test("modified combos are left to the browser", async () => {
   }
 });
 
-Deno.test("AltGr brackets still step (AltGr reports as Ctrl+Alt)", async () => {
+test("AltGr brackets still step (AltGr reports as Ctrl+Alt)", async () => {
   const video = createFakeVideo({
     paused: false,
     currentSrc: "https://example.test/altgr.mp4",
@@ -527,14 +528,14 @@ Deno.test("AltGr brackets still step (AltGr reports as Ctrl+Alt)", async () => {
       altGraphKey: true,
     });
 
-    assertEquals(event.defaultPrevented, true);
-    assertEquals(video.playbackRate, 1.75);
+    assert.deepEqual(event.defaultPrevented, true);
+    assert.deepEqual(video.playbackRate, 1.75);
   } finally {
     await env?.restore();
   }
 });
 
-Deno.test("keys are ignored while typing in a field", async () => {
+test("keys are ignored while typing in a field", async () => {
   const video = createFakeVideo({
     paused: false,
     currentSrc: "https://example.test/editable.mp4",
@@ -553,14 +554,14 @@ Deno.test("keys are ignored while typing in a field", async () => {
       target: input,
     });
 
-    assertEquals(event.defaultPrevented, false);
-    assertEquals(video.rateWrites, [2]);
+    assert.deepEqual(event.defaultPrevented, false);
+    assert.deepEqual(video.rateWrites, [2]);
   } finally {
     await env?.restore();
   }
 });
 
-Deno.test("key repeat does not step again", async () => {
+test("key repeat does not step again", async () => {
   const video = createFakeVideo({
     paused: false,
     currentSrc: "https://example.test/repeat.mp4",
@@ -577,14 +578,14 @@ Deno.test("key repeat does not step again", async () => {
       repeat: true,
     });
 
-    assertEquals(event.defaultPrevented, false);
-    assertEquals(video.rateWrites, [2]);
+    assert.deepEqual(event.defaultPrevented, false);
+    assert.deepEqual(video.rateWrites, [2]);
   } finally {
     await env?.restore();
   }
 });
 
-Deno.test("keys are inert on a watch page without opt-in", async () => {
+test("keys are inert on a watch page without opt-in", async () => {
   const video = createFakeVideo({
     paused: false,
     currentSrc: "https://example.test/inert.mp4",
@@ -602,14 +603,14 @@ Deno.test("keys are inert on a watch page without opt-in", async () => {
 
     const event = env.dispatchKey({ key: "]", code: "BracketRight" });
 
-    assertEquals(event.defaultPrevented, false);
-    assertEquals(video.rateWrites, []);
+    assert.deepEqual(event.defaultPrevented, false);
+    assert.deepEqual(video.rateWrites, []);
   } finally {
     await env?.restore();
   }
 });
 
-Deno.test("ratechange away from the target is reasserted; matching ratechange is a no-op", async () => {
+test("ratechange away from the target is reasserted; matching ratechange is a no-op", async () => {
   const video = createFakeVideo({
     paused: false,
     currentSrc: "https://example.test/ratechange.mp4",
@@ -619,24 +620,24 @@ Deno.test("ratechange away from the target is reasserted; matching ratechange is
   try {
     env = await startContentScript({ videos: [video], stored: { speed: 2 } });
     await env.ready;
-    assertEquals(video.rateWrites, [2]);
+    assert.deepEqual(video.rateWrites, [2]);
 
     // Simulate YouTube resetting the rate back to 1x.
     video.playbackRate = 1;
     video.emit("ratechange");
 
-    assertEquals(video.playbackRate, 2);
-    assertEquals(video.rateWrites, [2, 1, 2]);
+    assert.deepEqual(video.playbackRate, 2);
+    assert.deepEqual(video.rateWrites, [2, 1, 2]);
 
     // A ratechange that already matches the target must not write again.
     video.emit("ratechange");
-    assertEquals(video.rateWrites, [2, 1, 2]);
+    assert.deepEqual(video.rateWrites, [2, 1, 2]);
   } finally {
     await env?.restore();
   }
 });
 
-Deno.test("removing the settings key resets opt-in state and releases the video", async () => {
+test("removing the settings key resets opt-in state and releases the video", async () => {
   const video = createFakeVideo({
     paused: false,
     currentSrc: "https://example.test/watch.mp4",
@@ -651,7 +652,7 @@ Deno.test("removing the settings key resets opt-in state and releases the video"
       stored: { speed: 2, settings: { enableOnWatch: true } },
     });
     await env.ready;
-    assertEquals(video.playbackRate, 2);
+    assert.deepEqual(video.playbackRate, 2);
 
     // Simulate the settings key being removed from storage externally.
     env.emitStorageChange({
@@ -659,23 +660,23 @@ Deno.test("removing the settings key resets opt-in state and releases the video"
     });
 
     // The page is no longer active: the video is released and reset to 1x.
-    assertEquals(video.playbackRate, 1);
-    assertEquals(video.rateWrites, [2, 1]);
+    assert.deepEqual(video.playbackRate, 1);
+    assert.deepEqual(video.rateWrites, [2, 1]);
 
     // Adoption must not re-persist settings (no storage write loop).
-    assertEquals(
+    assert.deepEqual(
       env.storageWrites.some((write) => "settings" in write),
       false,
     );
 
     const state = env.sendMessage({ type: "GET_STATE" });
-    assertEquals(state.settings.enableOnWatch, false);
+    assert.deepEqual(state.settings.enableOnWatch, false);
   } finally {
     await env?.restore();
   }
 });
 
-Deno.test("navigating to an inactive route resets the managed video to 1x", async () => {
+test("navigating to an inactive route resets the managed video to 1x", async () => {
   const video = createFakeVideo({
     paused: false,
     currentSrc: "https://example.test/navigate-away.mp4",
@@ -686,7 +687,7 @@ Deno.test("navigating to an inactive route resets the managed video to 1x", asyn
   try {
     env = await startContentScript({ videos: [video], stored: { speed: 2 } });
     await env.ready;
-    assertEquals(video.playbackRate, 2);
+    assert.deepEqual(video.playbackRate, 2);
 
     // Simulate SPA navigation to the home feed (an inactive route).
     env.location.pathname = "/";
@@ -694,12 +695,12 @@ Deno.test("navigating to an inactive route resets the managed video to 1x", asyn
     env.dispatchGlobalEvent("yt-navigate-finish");
 
     // The video is handed back at the default rate.
-    assertEquals(video.playbackRate, 1);
-    assertEquals(video.rateWrites, [2, 1]);
+    assert.deepEqual(video.playbackRate, 1);
+    assert.deepEqual(video.rateWrites, [2, 1]);
 
     // The persisted preference is untouched: the reset touches the element,
     // not storage.
-    assertEquals(
+    assert.deepEqual(
       env.storageWrites.some((write) => write.speed === 1),
       false,
     );
@@ -708,7 +709,7 @@ Deno.test("navigating to an inactive route resets the managed video to 1x", asyn
   }
 });
 
-Deno.test("navigating between Shorts keeps the chosen speed", async () => {
+test("navigating between Shorts keeps the chosen speed", async () => {
   const video = createFakeVideo({
     paused: false,
     currentSrc: "https://example.test/short-to-short.mp4",
@@ -719,7 +720,7 @@ Deno.test("navigating between Shorts keeps the chosen speed", async () => {
   try {
     env = await startContentScript({ videos: [video], stored: { speed: 2 } });
     await env.ready;
-    assertEquals(video.playbackRate, 2);
+    assert.deepEqual(video.playbackRate, 2);
 
     // Navigate to another Short (active -> active).
     env.location.pathname = "/shorts/next";
@@ -729,21 +730,22 @@ Deno.test("navigating between Shorts keeps the chosen speed", async () => {
     // Flush the deferred reapply timeouts scheduled by onNavigate.
     for (const timer of env.pendingTimers) {
       if (
-        timer.kind === "timeout" && (timer.delay === 0 || timer.delay === 250)
+        timer.kind === "timeout" &&
+        (timer.delay === 0 || timer.delay === 250)
       ) {
         env.runTimer(timer.handle);
       }
     }
 
     // The chosen speed sticks; 1x was never written.
-    assertEquals(video.rateWrites.includes(1), false);
-    assertEquals(video.playbackRate, 2);
+    assert.deepEqual(video.rateWrites.includes(1), false);
+    assert.deepEqual(video.playbackRate, 2);
   } finally {
     await env?.restore();
   }
 });
 
-Deno.test("pause opt-out: settings changes remove pause enforcement", async () => {
+test("pause opt-out: settings changes remove pause enforcement", async () => {
   for (const source of ["message", "storage", "removed"]) {
     const video = createFakeVideo({ paused: false });
     let env;
@@ -756,7 +758,7 @@ Deno.test("pause opt-out: settings changes remove pause enforcement", async () =
       });
       await env.ready;
       env.dispatchKey({ key: "p", code: "KeyP" });
-      assertEquals(pauseSweepTimers(env).length, 1);
+      assert.deepEqual(pauseSweepTimers(env).length, 1);
 
       if (source === "message") {
         env.sendMessage({
@@ -767,17 +769,16 @@ Deno.test("pause opt-out: settings changes remove pause enforcement", async () =
         env.emitStorageChange({
           settings: {
             oldValue: { enableOnWatch: true },
-            newValue: source === "removed"
-              ? undefined
-              : { enableOnWatch: false },
+            newValue:
+              source === "removed" ? undefined : { enableOnWatch: false },
           },
         });
-        assertEquals(env.storageWrites, []);
+        assert.deepEqual(env.storageWrites, []);
       }
 
-      assertEquals(video.paused, true, source);
-      assertEquals(video.playbackRate, 1, source);
-      assertEquals(pauseSweepTimers(env).length, 0, source);
+      assert.deepEqual(video.paused, true, source);
+      assert.deepEqual(video.playbackRate, 1, source);
+      assert.deepEqual(pauseSweepTimers(env).length, 0, source);
       for (const timer of env.pendingTimers) {
         if (timer.kind === "timeout" && timer.delay === 0) {
           env.runTimer(timer.handle);
@@ -786,28 +787,26 @@ Deno.test("pause opt-out: settings changes remove pause enforcement", async () =
       await video.play();
       video.emit("play");
       video.emit("playing");
-      assertEquals(video.paused, false, source);
-      assertEquals(video.pauseCalls, 1, source);
-      assertEquals(pauseSweepTimers(env).length, 0, source);
+      assert.deepEqual(video.paused, false, source);
+      assert.deepEqual(video.pauseCalls, 1, source);
+      assert.deepEqual(pauseSweepTimers(env).length, 0, source);
     } finally {
       await env?.restore();
     }
   }
 });
 
-Deno.test("inactive fallback: polling and media callbacks release control without scanning", async () => {
-  for (
-    const trigger of [
-      "interval",
-      "ratechange",
-      "matching-ratechange",
-      "play",
-      "pause-play",
-      "pause-playing",
-      "pause-sweep",
-      "frame",
-    ]
-  ) {
+test("inactive fallback: polling and media callbacks release control without scanning", async () => {
+  for (const trigger of [
+    "interval",
+    "ratechange",
+    "matching-ratechange",
+    "play",
+    "pause-play",
+    "pause-playing",
+    "pause-sweep",
+    "frame",
+  ]) {
     const video = createFakeVideo({ paused: false });
     let env;
     try {
@@ -818,8 +817,8 @@ Deno.test("inactive fallback: polling and media callbacks release control withou
       }
       if (trigger === "frame") env.triggerMutation();
       const baseline = env.queryCount;
-      const interval = env.pendingTimers.find((timer) =>
-        timer.kind === "interval"
+      const interval = env.pendingTimers.find(
+        (timer) => timer.kind === "interval",
       );
       env.location.pathname = "/";
       env.location.href = "https://www.youtube.com/";
@@ -828,17 +827,17 @@ Deno.test("inactive fallback: polling and media callbacks release control withou
       else if (trigger === "frame") await env.flushAnimationFrames();
       else if (trigger === "pause-sweep") {
         env.runTimer(pauseSweepTimers(env)[0].handle);
-        assertEquals(video.paused, true);
+        assert.deepEqual(video.paused, true);
       } else {
         if (trigger === "ratechange") video.playbackRate = 1.25;
         if (trigger.startsWith("pause-")) await video.play();
         video.emit(trigger.replace(/^(pause-|matching-)/, ""));
-        assertEquals(video.paused, false, trigger);
+        assert.deepEqual(video.paused, false, trigger);
       }
 
-      assertEquals(video.playbackRate, 1, trigger);
-      assertEquals(pauseSweepTimers(env).length, 0, trigger);
-      assertEquals(env.queryCount, baseline, trigger);
+      assert.deepEqual(video.playbackRate, 1, trigger);
+      assert.deepEqual(pauseSweepTimers(env).length, 0, trigger);
+      assert.deepEqual(env.queryCount, baseline, trigger);
       video.playbackRate = 1.25;
       video.emit("ratechange");
       await video.play();
@@ -846,40 +845,42 @@ Deno.test("inactive fallback: polling and media callbacks release control withou
       video.emit("playing");
       const writes = video.rateWrites.length;
       env.runTimer(interval.handle);
-      assertEquals(video.rateWrites.length, writes, trigger);
-      assertEquals(video.playbackRate, 1.25, trigger);
-      assertEquals(video.paused, false, trigger);
-      assertEquals(env.queryCount, baseline, trigger);
-      assertEquals(env.storageWrites, [], trigger);
-      assertEquals(env.sendMessage({ type: "GET_STATE" }).speed, 2, trigger);
+      assert.deepEqual(video.rateWrites.length, writes, trigger);
+      assert.deepEqual(video.playbackRate, 1.25, trigger);
+      assert.deepEqual(video.paused, false, trigger);
+      assert.deepEqual(env.queryCount, baseline, trigger);
+      assert.deepEqual(env.storageWrites, [], trigger);
+      assert.deepEqual(
+        env.sendMessage({ type: "GET_STATE" }).speed,
+        2,
+        trigger,
+      );
     } finally {
       await env?.restore();
     }
   }
 });
 
-Deno.test("shortcut precedence: characters win over conflicting physical keys", async () => {
+test("shortcut precedence: characters win over conflicting physical keys", async () => {
   const video = createFakeVideo({ paused: false });
   let env;
   try {
     env = await startContentScript({ videos: [video], stored: { speed: 2 } });
     await env.ready;
-    for (
-      const [key, code, expected] of [
-        ["[", "BracketRight", 1.75],
-        ["]", "BracketLeft", 2.25],
-        ["Backspace", "BracketRight", 1],
-        ["x", "BracketLeft", 1.75],
-      ]
-    ) {
+    for (const [key, code, expected] of [
+      ["[", "BracketRight", 1.75],
+      ["]", "BracketLeft", 2.25],
+      ["Backspace", "BracketRight", 1],
+      ["x", "BracketLeft", 1.75],
+    ]) {
       env.sendMessage({ type: "SET_SPEED", value: 2 });
       const event = env.dispatchKey({ key, code });
-      assertEquals(event.defaultPrevented, true);
-      assertEquals(video.playbackRate, expected, `${key} / ${code}`);
+      assert.deepEqual(event.defaultPrevented, true);
+      assert.deepEqual(video.playbackRate, expected, `${key} / ${code}`);
     }
     env.dispatchKey({ key: "p", code: "BracketRight" });
-    assertEquals(video.paused, true);
-    assertEquals(video.playbackRate, 1.75);
+    assert.deepEqual(video.paused, true);
+    assert.deepEqual(video.playbackRate, 1.75);
   } finally {
     await env?.restore();
   }

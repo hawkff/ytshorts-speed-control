@@ -8,7 +8,7 @@
  * persists the chosen speed in local extension storage (the content script
  * also listens to storage changes, so the popup and page stay in sync).
  */
-(function () {
+(() => {
   "use strict";
 
   const Speed = globalThis.YTShortsSpeed;
@@ -51,7 +51,7 @@
         active: true,
         currentWindow: true,
       });
-      return (tabs && tabs[0]) || null;
+      return tabs?.[0] ?? null;
     } catch (_err) {
       return null;
     }
@@ -138,24 +138,23 @@
       return { saved, applied };
     });
     // Keep the queue tail resolved so one failure cannot poison later ops.
-    speedQueue = run.then(() => undefined, () => undefined);
+    speedQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
     const { saved, applied } = await run;
 
     // A newer request took over while we awaited; leave the UI to it.
     if (requestId !== speedRequestId) return false;
     speedPending = false;
 
+    const label = Speed.formatSpeed(parsed);
     if (saved && applied) {
-      setStatus(`Saved ${Speed.formatSpeed(parsed)}.`, false);
+      setStatus(`Saved ${label}.`, false);
     } else if (applied) {
       setStatus("Speed set for this tab, but couldn't save the speed.", true);
     } else if (saved) {
-      setStatus(
-        `Saved ${
-          Speed.formatSpeed(parsed)
-        }. Open or reload YouTube to apply it.`,
-        true,
-      );
+      setStatus(`Saved ${label}. Open or reload YouTube to apply it.`, true);
     } else {
       render(settledSpeed ?? Speed.DEFAULT_SPEED);
       setStatus("Couldn't save or apply that speed.", true);
@@ -214,7 +213,10 @@
       if (saved || applied) settledSettings = { ...requested };
       return { saved, applied };
     });
-    settingsQueue = run.then(() => undefined, () => undefined);
+    settingsQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
     const { saved, applied } = await run;
 
     if (requestId !== settingsRequestId) return false;
@@ -287,13 +289,10 @@
     let speed = Speed.DEFAULT_SPEED;
     let initialSettings = { ...Settings.DEFAULT_SETTINGS };
     try {
-      const data = await extensionApi.storage.local.get([
-        "speed",
-        "settings",
-      ]);
-      const stored = Speed.parseSpeed(data && data.speed);
+      const data = await extensionApi.storage.local.get(["speed", "settings"]);
+      const stored = Speed.parseSpeed(data?.speed);
       if (stored !== null) speed = stored;
-      initialSettings = Settings.normalizeSettings(data && data.settings);
+      initialSettings = Settings.normalizeSettings(data?.settings);
     } catch (_err) {
       // ignore; keep defaults
     }
@@ -302,7 +301,7 @@
     if (state && Speed.isValidSpeed(state.speed)) {
       speed = state.speed;
     }
-    if (state && state.settings) {
+    if (state?.settings) {
       initialSettings = Settings.normalizeSettings(state.settings);
     }
 
@@ -319,9 +318,9 @@
 
     if (!onYouTube) {
       setStatus("Open a YouTube tab to control playback.", true);
-    } else if (state && state.isShorts) {
+    } else if (state?.isShorts) {
       setStatus(`Selected speed: ${Speed.formatSpeed(speed)}.`, false);
-    } else if (state && state.isWatch) {
+    } else if (state?.isWatch) {
       if (settings.enableOnWatch) {
         setStatus(`Selected speed: ${Speed.formatSpeed(speed)}.`, false);
       } else {

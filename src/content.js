@@ -14,7 +14,7 @@
  * Pure math lives in lib/speed.js (loaded first), exposed as
  * globalThis.YTShortsSpeed.
  */
-(function () {
+(() => {
   "use strict";
 
   const Speed = globalThis.YTShortsSpeed;
@@ -112,8 +112,8 @@
     }
     if (best) return best;
 
-    const playing = videos.find((video) =>
-      !video.paused && !video.ended && video.readyState > 2
+    const playing = videos.find(
+      (video) => !video.paused && !video.ended && video.readyState > 2,
     );
     if (playing) return playing;
     const withSrc = videos.find((video) => video.currentSrc || video.src);
@@ -129,14 +129,8 @@
     if (rect.width <= 0 || rect.height <= 0) return 0;
     const vw = globalThis.innerWidth || document.documentElement.clientWidth;
     const vh = globalThis.innerHeight || document.documentElement.clientHeight;
-    const w = Math.max(
-      0,
-      Math.min(rect.right, vw) - Math.max(rect.left, 0),
-    );
-    const h = Math.max(
-      0,
-      Math.min(rect.bottom, vh) - Math.max(rect.top, 0),
-    );
+    const w = Math.max(0, Math.min(rect.right, vw) - Math.max(rect.left, 0));
+    const h = Math.max(0, Math.min(rect.bottom, vh) - Math.max(rect.top, 0));
     return w * h;
   }
 
@@ -633,7 +627,8 @@
     // modifier but ignore other Cmd/Ctrl/Alt combos so browser/system shortcuts
     // (e.g. Cmd+[ / Cmd+] back/forward) keep working. Backspace never uses a
     // modifier here (Cmd/Alt+Backspace are OS navigation/delete).
-    const isAltGraph = typeof e.getModifierState === "function" &&
+    const isAltGraph =
+      typeof e.getModifierState === "function" &&
       e.getModifierState("AltGraph");
 
     if (
@@ -790,13 +785,14 @@
         STORAGE_KEY,
         SETTINGS_KEY,
       ]);
-      const stored = Speed.parseSpeed(data && data[STORAGE_KEY]);
+      const stored = Speed.parseSpeed(data?.[STORAGE_KEY]);
       if (stored !== null && speedRevision === speedRevisionAtRead) {
         desiredSpeed = stored;
       }
-      const storedSettings = data && data[SETTINGS_KEY];
+      const storedSettings = data?.[SETTINGS_KEY];
       if (
-        storedSettings && typeof storedSettings === "object" &&
+        storedSettings &&
+        typeof storedSettings === "object" &&
         settingsRevision === settingsRevisionAtRead
       ) {
         settings = Settings.normalizeSettings(storedSettings);
