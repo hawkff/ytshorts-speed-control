@@ -138,10 +138,7 @@
       return { saved, applied };
     });
     // Keep the queue tail resolved so one failure cannot poison later ops.
-    speedQueue = run.then(
-      () => undefined,
-      () => undefined,
-    );
+    speedQueue = run.catch(() => {});
     const { saved, applied } = await run;
 
     // A newer request took over while we awaited; leave the UI to it.
@@ -213,10 +210,7 @@
       if (saved || applied) settledSettings = { ...requested };
       return { saved, applied };
     });
-    settingsQueue = run.then(
-      () => undefined,
-      () => undefined,
-    );
+    settingsQueue = run.catch(() => {});
     const { saved, applied } = await run;
 
     if (requestId !== settingsRequestId) return false;
@@ -282,9 +276,10 @@
     wireControls();
     renderShortcutHints();
 
-    // Prefer the live state from the content script; fall back to storage.
-    const tab = await getActiveTab();
-    const onYouTube = tab && isYouTubeUrl(tab.url);
+    // The reads are independent, so start the tab and live-state requests
+    // before waiting on storage. Neither promise rejects.
+    const tabRead = getActiveTab();
+    const stateRead = sendToTab({ type: "GET_STATE" });
 
     let speed = Speed.DEFAULT_SPEED;
     let initialSettings = { ...Settings.DEFAULT_SETTINGS };
@@ -297,10 +292,12 @@
       // ignore; keep defaults
     }
 
-    const state = await sendToTab({ type: "GET_STATE" });
-    if (state && Speed.isValidSpeed(state.speed)) {
-      speed = state.speed;
-    }
+    // Prefer the live state from the content script; fall back to storage.
+    const tab = await tabRead;
+    const onYouTube = tab && isYouTubeUrl(tab.url);
+    const state = await stateRead;
+    const live = Speed.parseSpeed(state?.speed);
+    if (live !== null) speed = live;
     if (state?.settings) {
       initialSettings = Settings.normalizeSettings(state.settings);
     }

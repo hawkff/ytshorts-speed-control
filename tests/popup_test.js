@@ -475,7 +475,6 @@ test("speed status: inactive watch pages report saving, not playback", async () 
       state: {
         speed: 1,
         isWatch: true,
-        isActive: false,
         settings: { enableOnWatch: false },
       },
     });
@@ -487,17 +486,40 @@ test("speed status: inactive watch pages report saving, not playback", async () 
   }
 });
 
-test("speed status: startup does not claim playback when no video exists", async () => {
+test("speed status: Shorts startup reports the selected speed", async () => {
   let env;
   try {
-    env = await startPopup({
-      state: { speed: 2, isShorts: true, isActive: true, hasVideo: false },
-    });
+    env = await startPopup({ state: { speed: 2, isShorts: true } });
     assert.deepEqual(env.status(), {
       text: "Selected speed: 2x.",
       warn: false,
     });
   } finally {
+    env?.restore();
+  }
+});
+
+test("popup startup: live state is requested without waiting for storage", async () => {
+  const storageRead = deferred();
+  let env;
+  try {
+    env = await startPopup({
+      onStorageGet: () => storageRead.promise,
+      state: { speed: 2, isShorts: true },
+    });
+    assert(
+      env.calls.some(
+        (call) =>
+          call.api === "sendMessage" && call.message.type === "GET_STATE",
+      ),
+    );
+
+    storageRead.resolve({ speed: 1.5 });
+    await env.flush();
+    assert.deepEqual(env.els["current-speed"].textContent, "2x");
+  } finally {
+    storageRead.resolve({});
+    await env?.flush();
     env?.restore();
   }
 });

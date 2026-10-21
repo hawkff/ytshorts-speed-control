@@ -27,18 +27,6 @@ test("roundSpeed kills floating-point dust", () => {
   assert.deepEqual(Speed.roundSpeed(1.25 + 0.25), 1.5);
 });
 
-test("isValidSpeed distinguishes usable speeds", () => {
-  assert.equal(Speed.isValidSpeed(1), true);
-  assert.equal(Speed.isValidSpeed(0.25), true);
-  assert.equal(Speed.isValidSpeed(0), false);
-  assert.equal(Speed.isValidSpeed(-1), false);
-  assert.equal(Speed.isValidSpeed(NaN), false);
-  assert.equal(Speed.isValidSpeed(Infinity), false);
-  assert.equal(Speed.isValidSpeed("1"), false);
-  assert.equal(Speed.isValidSpeed(null), false);
-  assert.equal(Speed.isValidSpeed(undefined), false);
-});
-
 test("clampSpeed constrains to bounds", () => {
   assert.deepEqual(Speed.clampSpeed(1), 1);
   assert.deepEqual(Speed.clampSpeed(100), 16);

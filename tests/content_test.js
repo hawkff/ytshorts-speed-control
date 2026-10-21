@@ -138,7 +138,6 @@ test("popup updates during startup beat the older storage snapshot", async () =>
     const state = env.sendMessage({ type: "GET_STATE" });
     assert.deepEqual(state.speed, 2);
     assert.deepEqual(state.settings.enableOnWatch, true);
-    assert.deepEqual(state.isActive, true);
   } finally {
     await env?.restore();
   }

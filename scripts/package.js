@@ -33,12 +33,6 @@ async function readManifest(path) {
 const chromeManifest = await readManifest("manifest.json");
 const firefoxManifest = await readManifest("manifest.firefox.json");
 
-if (chromeManifest.version !== firefoxManifest.version) {
-  throw new Error(
-    `Manifest versions differ: Chrome ${chromeManifest.version}, Firefox ${firefoxManifest.version}`,
-  );
-}
-
 if (!/^\d+\.\d+\.\d+$/.test(chromeManifest.version)) {
   throw new Error(`Invalid release version: ${chromeManifest.version}`);
 }

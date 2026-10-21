@@ -541,8 +541,6 @@
           speed: desiredSpeed,
           isShorts: isShortsPage(),
           isWatch: isWatchPage(),
-          isActive: isActivePage(),
-          hasVideo: !!findActiveVideo(),
           settings: { ...settings },
         });
         return true;
@@ -649,7 +647,6 @@
     // stopImmediatePropagation also blocks other listeners on this same target.
     e.preventDefault();
     e.stopImmediatePropagation();
-    e.stopPropagation();
 
     switch (action) {
       case "up":
@@ -715,9 +712,9 @@
   }
 
   function startObservers() {
-    // YouTube fires this custom event on SPA navigation.
+    // YouTube fires this custom event on SPA navigation. A capture listener
+    // on window also sees events dispatched on document or any element.
     globalThis.addEventListener("yt-navigate-finish", onNavigate, true);
-    document.addEventListener("yt-navigate-finish", onNavigate, true);
 
     // Fallback: detect URL changes and DOM mutations (video recycling).
     const mo = new MutationObserver(() => {

@@ -183,8 +183,6 @@ export async function startContentScript(options = {}) {
     stopImmediatePropagation() {
       this.immediatePropagationStopped = true;
     }
-
-    stopPropagation() {}
   }
 
   class FakeMutationObserver {
