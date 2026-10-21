@@ -479,6 +479,48 @@ test("Backspace resets the speed to 1x", async () => {
   }
 });
 
+/** Minimal DOM parent that records appended children. */
+function fakeContainer() {
+  const node = {
+    children: [],
+    appendChild(child) {
+      node.children.push(child);
+      child.parentNode = node;
+      return child;
+    },
+  };
+  return node;
+}
+
+test("the speed badge shows inside a fullscreen player", async () => {
+  const video = createFakeVideo({
+    paused: false,
+    currentSrc: "https://example.test/fullscreen.mp4",
+    rect: { left: 100, top: 100, width: 400, height: 400 },
+  });
+  const body = fakeContainer();
+  const player = fakeContainer();
+  let env;
+  try {
+    env = await startContentScript({
+      videos: [video],
+      stored: { speed: 2 },
+      body,
+      fullscreenElement: player,
+    });
+    await env.ready;
+
+    env.dispatchKey({ key: "]", code: "BracketRight" });
+
+    // The top layer hides body content, so the badge must sit in the player.
+    assert.equal(body.children.length, 0);
+    assert.equal(player.children.length, 1);
+    assert.equal(player.children[0].textContent, "\u26A1 2.25x");
+  } finally {
+    await env?.restore();
+  }
+});
+
 test("modified combos are left to the browser", async () => {
   const video = createFakeVideo({
     paused: false,

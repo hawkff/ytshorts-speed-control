@@ -494,7 +494,10 @@
    * @param {string} text
    */
   function showStatusIndicator(text) {
-    if (!document.body) return;
+    // A fullscreen player paints over everything in body, so the badge must
+    // live inside it to stay visible.
+    const host = document.fullscreenElement ?? document.body;
+    if (!host) return;
     let el = document.getElementById(INDICATOR_ID);
     if (!el) {
       el = document.createElement("div");
@@ -516,8 +519,8 @@
         transition: "opacity 0.18s ease",
         opacity: "0",
       });
-      document.body.appendChild(el);
     }
+    if (el.parentNode !== host) host.appendChild(el);
     el.textContent = text;
     // Force reflow so the opacity transition runs on repeated triggers.
     void el.offsetWidth;

@@ -210,6 +210,7 @@ export async function startContentScript(options = {}) {
   const document = {
     readyState: options.readyState ?? "complete",
     body: options.body ?? null,
+    fullscreenElement: options.fullscreenElement ?? null,
     documentElement,
     querySelectorAll(selector) {
       if (selector === "video") queryCount += 1;
