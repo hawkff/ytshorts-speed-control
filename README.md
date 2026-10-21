@@ -15,7 +15,7 @@ For Chrome, Chromium-based browsers, and Firefox desktop 140 or newer.
 
 Download the ZIP for your browser from the
 [latest release](https://github.com/hawkff/ytshorts-speed-control/releases/latest).
-You do not need Deno to install a release.
+You do not need Bun to install a release.
 
 ### Chrome and Chromium-based browsers
 
@@ -88,24 +88,39 @@ It requests two permissions:
 
 ## Development
 
-The extension uses plain JavaScript, HTML, and CSS. Load the repository in
-Chrome to try changes. Use [Deno 2](https://deno.com/) for the development
-tasks.
+The extension is plain JavaScript, HTML, and CSS with no build step, so the
+files in this repository are the files that ship. Load the repository in Chrome
+to try changes. The development tasks need [Bun](https://bun.sh/) 1.4 or newer.
 
 ```sh
-deno task test     # Run tests
-deno task check    # Check formatting, lint, type-check packaging, and run tests
-deno task package  # Create Chrome and Firefox ZIPs in dist/
+bun install      # Install Biome, the formatter and linter
+bun test         # Run tests
+bun run check    # Check formatting and lint, then run tests
+bun run package  # Create Chrome and Firefox ZIPs in dist/
 ```
 
-Use `deno fmt` to format the source and `deno lint` to lint it. Packaging also
-requires the `zip` command. There is no dependency-install or build step for the
-extension itself.
+Run `bunx biome check --write` to format the source and apply safe lint fixes.
+Packaging also requires the `zip` command.
 
-`manifest.json` targets Chrome. `manifest.firefox.json` adds Firefox metadata;
-the packaging task puts the matching manifest in each archive. Tests cover speed
-calculations, settings, popup interactions, content-script behavior, and
-manifest consistency.
+The content script and popup share `lib/speed.js` and `lib/settings.js`. MV3
+content scripts can't load ES modules without a bundler, so these files are
+classic scripts that attach their API to `globalThis`.
+
+`manifest.json` targets Chrome. `manifest.firefox.json` must match it except for
+the Firefox metadata in `browser_specific_settings`, and the packaging script
+puts the matching manifest in each archive. The ZIPs contain only the files
+listed in `sharedFiles` in `scripts/package.js`, so add any new runtime file
+there. Tests cover speed calculations, settings, popup interactions,
+content-script behavior, and manifest consistency.
+
+### Releasing
+
+1. Bump `version` in both manifests.
+2. Run `bun run check` and commit.
+3. Tag the commit `v<version>` and push the tag.
+
+The release workflow checks that the tag matches the manifest version, builds
+both ZIPs, and publishes a GitHub release with them.
 
 ## License
 
