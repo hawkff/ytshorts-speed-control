@@ -129,6 +129,7 @@ export async function startContentScript(options = {}) {
   const mutationObservers = [];
   const animationFrames = new Map();
   const timers = new Map();
+  const createdElements = [];
   const storageWrites = [];
   let queryCount = 0;
   let nextHandle = 1;
@@ -220,11 +221,13 @@ export async function startContentScript(options = {}) {
     removeEventListener(type, listener) {
       removeListener(documentListeners, type, listener);
     },
-    getElementById() {
-      return null;
+    getElementById(id) {
+      return createdElements.find((element) => element.id === id) ?? null;
     },
     createElement() {
-      return new FakeHTMLElement();
+      const element = new FakeHTMLElement();
+      createdElements.push(element);
+      return element;
     },
   };
 
@@ -370,14 +373,11 @@ export async function startContentScript(options = {}) {
       storageSettled = true;
       storageDeferred.resolve({ ...value });
     },
+    /** Resolves with the listener's response, which may arrive later. */
     sendMessage(message) {
-      let response;
-      for (const listener of runtimeListeners) {
-        listener(message, {}, (value) => {
-          response = value;
-        });
-      }
-      return response;
+      return new Promise((resolve) => {
+        for (const listener of runtimeListeners) listener(message, {}, resolve);
+      });
     },
     dispatchKey(init = {}) {
       const event = new FakeKeyboardEvent("keydown", init);

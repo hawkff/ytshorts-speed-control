@@ -119,9 +119,12 @@ test("popup updates during startup beat the older storage snapshot", async () =>
     });
     await env.listenersReady;
 
-    const speedResponse = env.sendMessage({ type: "SET_SPEED", value: 2 });
+    const speedResponse = await env.sendMessage({
+      type: "SET_SPEED",
+      value: 2,
+    });
     assert.deepEqual(speedResponse, { ok: true, speed: 2 });
-    const settingsResponse = env.sendMessage({
+    const settingsResponse = await env.sendMessage({
       type: "SET_SETTINGS",
       settings: { enableOnWatch: true },
     });
@@ -135,7 +138,7 @@ test("popup updates during startup beat the older storage snapshot", async () =>
     });
     await env.ready;
 
-    const state = env.sendMessage({ type: "GET_STATE" });
+    const state = await env.sendMessage({ type: "GET_STATE" });
     assert.deepEqual(state.speed, 2);
     assert.deepEqual(state.settings.enableOnWatch, true);
   } finally {
@@ -162,7 +165,7 @@ test("storage speed event equal to the default supersedes the snapshot", async (
     env.resolveStorageGet({ speed: 2 });
     await env.ready;
 
-    const state = env.sendMessage({ type: "GET_STATE" });
+    const state = await env.sendMessage({ type: "GET_STATE" });
     assert.deepEqual(state.speed, 1);
   } finally {
     await env?.restore();
@@ -272,7 +275,7 @@ test("enabling watch via settings applies speed without DOM churn", async () => 
     await env.ready;
     assert.deepEqual(video.rateWrites, []);
 
-    const response = env.sendMessage({
+    const response = await env.sendMessage({
       type: "SET_SETTINGS",
       settings: { enableOnWatch: true },
     });
@@ -478,11 +481,13 @@ test("Backspace resets the speed to 1x", async () => {
   }
 });
 
-/** Minimal DOM parent that records appended children. */
+/** Minimal DOM parent; appendChild moves a child like the real DOM. */
 function fakeContainer() {
   const node = {
     children: [],
     appendChild(child) {
+      const siblings = child.parentNode?.children;
+      siblings?.splice(siblings.indexOf(child), 1);
       node.children.push(child);
       child.parentNode = node;
       return child;
@@ -491,7 +496,7 @@ function fakeContainer() {
   return node;
 }
 
-test("the speed badge shows inside a fullscreen player", async () => {
+test("the speed badge follows the player in and out of fullscreen", async () => {
   const video = createFakeVideo({
     paused: false,
     currentSrc: "https://example.test/fullscreen.mp4",
@@ -505,16 +510,50 @@ test("the speed badge shows inside a fullscreen player", async () => {
       videos: [video],
       stored: { speed: 2 },
       body,
-      fullscreenElement: player,
     });
     await env.ready;
 
     env.dispatchKey({ key: "]", code: "BracketRight" });
+    const badge = body.children[0];
+    assert.equal(badge.textContent, "\u26A1 2.25x");
 
-    // The top layer hides body content, so the badge must sit in the player.
-    assert.equal(body.children.length, 0);
-    assert.equal(player.children.length, 1);
-    assert.equal(player.children[0].textContent, "\u26A1 2.25x");
+    // The top layer hides body content, so the badge must move into the
+    // fullscreen player, then back once fullscreen ends.
+    globalThis.document.fullscreenElement = player;
+    env.dispatchKey({ key: "]", code: "BracketRight" });
+    assert.deepEqual(body.children, []);
+    assert.deepEqual(player.children, [badge]);
+    assert.equal(badge.textContent, "\u26A1 2.5x");
+
+    globalThis.document.fullscreenElement = null;
+    env.dispatchKey({ key: "[", code: "BracketLeft" });
+    assert.deepEqual(player.children, []);
+    assert.deepEqual(body.children, [badge]);
+  } finally {
+    await env?.restore();
+  }
+});
+
+test("GET_STATE during startup answers with the stored values", async () => {
+  let env;
+  try {
+    env = await startContentScript({
+      pathname: "/watch",
+      href: "https://www.youtube.com/watch?v=example",
+      deferStorageGet: true,
+    });
+    await env.listenersReady;
+
+    // A popup opened mid-load must not get the script's starting defaults.
+    const state = env.sendMessage({ type: "GET_STATE" });
+    env.resolveStorageGet({ speed: 2, settings: { enableOnWatch: true } });
+
+    assert.deepEqual(await state, {
+      speed: 2,
+      isShorts: false,
+      isWatch: true,
+      settings: { enableOnWatch: true },
+    });
   } finally {
     await env?.restore();
   }
@@ -710,7 +749,7 @@ test("removing the settings key resets opt-in state and releases the video", asy
       false,
     );
 
-    const state = env.sendMessage({ type: "GET_STATE" });
+    const state = await env.sendMessage({ type: "GET_STATE" });
     assert.deepEqual(state.settings.enableOnWatch, false);
   } finally {
     await env?.restore();
@@ -892,7 +931,7 @@ test("inactive fallback: polling and media callbacks release control without sca
       assert.deepEqual(env.queryCount, baseline, trigger);
       assert.deepEqual(env.storageWrites, [], trigger);
       assert.deepEqual(
-        env.sendMessage({ type: "GET_STATE" }).speed,
+        (await env.sendMessage({ type: "GET_STATE" })).speed,
         2,
         trigger,
       );

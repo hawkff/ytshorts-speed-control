@@ -52,6 +52,11 @@
   /** The video we are currently managing, if any. */
   let managedVideo = null;
   let indicatorTimer = null;
+  /** Resolves once init has adopted the stored speed and settings. */
+  let markStorageLoaded;
+  const storageLoaded = new Promise((resolve) => {
+    markStorageLoaded = resolve;
+  });
 
   /** Tolerance for comparing playback rates (browsers may round slightly). */
   const RATE_EPSILON = 1e-3;
@@ -537,12 +542,16 @@
     if (!msg || typeof msg.type !== "string") return undefined;
     switch (msg.type) {
       case "GET_STATE": {
-        sendResponse({
-          speed: desiredSpeed,
-          isShorts: isShortsPage(),
-          isWatch: isWatchPage(),
-          settings: { ...settings },
-        });
+        // Answer after the stored values load, or the popup would show the
+        // defaults this script starts with.
+        storageLoaded.then(() =>
+          sendResponse({
+            speed: desiredSpeed,
+            isShorts: isShortsPage(),
+            isWatch: isWatchPage(),
+            settings: { ...settings },
+          }),
+        );
         return true;
       }
       case "SET_SETTINGS": {
@@ -800,6 +809,7 @@
     } catch (err) {
       console.error("[YTShortsSpeed] storage.get failed; using default", err);
     }
+    markStorageLoaded();
 
     startObservers();
     reapply();
