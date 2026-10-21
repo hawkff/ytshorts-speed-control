@@ -2,45 +2,51 @@
  * Unit tests for the shared settings helpers in ../lib/settings.js.
  *
  * lib/settings.js is a classic (non-module) script that attaches its API to
- * globalThis. Importing it for its side effect under Deno populates
+ * globalThis. Importing it for its side effect populates
  * globalThis.YTShortsSettings, which we then exercise here.
  *
  * Copyright (C) 2026 hawkff
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-import { assert, assertEquals } from "@std/assert";
+import { test } from "bun:test";
+import assert from "node:assert/strict";
 import "../lib/settings.js";
 
 const Settings = globalThis.YTShortsSettings;
 
-Deno.test("API is exposed on globalThis and frozen", () => {
-  assertEquals(typeof Settings, "object");
+test("API is exposed on globalThis and frozen", () => {
+  assert.deepEqual(typeof Settings, "object");
   assert(Object.isFrozen(Settings));
   assert(Object.isFrozen(Settings.DEFAULT_SETTINGS));
-  assertEquals(Settings.DEFAULT_SETTINGS, { enableOnWatch: false });
+  assert.deepEqual(Settings.DEFAULT_SETTINGS, { enableOnWatch: false });
 });
 
-Deno.test("normalizeSettings returns defaults for non-object input", () => {
-  assertEquals(Settings.normalizeSettings(undefined), { enableOnWatch: false });
-  assertEquals(Settings.normalizeSettings(null), { enableOnWatch: false });
-  assertEquals(Settings.normalizeSettings({}), { enableOnWatch: false });
-  assertEquals(Settings.normalizeSettings("string"), { enableOnWatch: false });
-});
-
-Deno.test("normalizeSettings adopts a boolean enableOnWatch", () => {
-  assertEquals(Settings.normalizeSettings({ enableOnWatch: true }), {
-    enableOnWatch: true,
+test("normalizeSettings returns defaults for non-object input", () => {
+  assert.deepEqual(Settings.normalizeSettings(undefined), {
+    enableOnWatch: false,
   });
-});
-
-Deno.test("normalizeSettings filters wrongly-typed enableOnWatch", () => {
-  assertEquals(Settings.normalizeSettings({ enableOnWatch: "yes" }), {
+  assert.deepEqual(Settings.normalizeSettings(null), { enableOnWatch: false });
+  assert.deepEqual(Settings.normalizeSettings({}), { enableOnWatch: false });
+  assert.deepEqual(Settings.normalizeSettings("string"), {
     enableOnWatch: false,
   });
 });
 
-Deno.test("normalizeSettings strips unknown keys", () => {
-  assertEquals(Settings.normalizeSettings({ enableOnWatch: true, evil: 1 }), {
+test("normalizeSettings adopts a boolean enableOnWatch", () => {
+  assert.deepEqual(Settings.normalizeSettings({ enableOnWatch: true }), {
     enableOnWatch: true,
   });
+});
+
+test("normalizeSettings filters wrongly-typed enableOnWatch", () => {
+  assert.deepEqual(Settings.normalizeSettings({ enableOnWatch: "yes" }), {
+    enableOnWatch: false,
+  });
+});
+
+test("normalizeSettings strips unknown keys", () => {
+  assert.deepEqual(
+    Settings.normalizeSettings({ enableOnWatch: true, evil: 1 }),
+    { enableOnWatch: true },
+  );
 });

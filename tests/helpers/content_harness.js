@@ -1,53 +1,9 @@
 import "../../lib/speed.js";
 import "../../lib/settings.js";
 
-// Deno only grants permission-free dynamic imports it can see statically, so
-// this fixed pool of literal import specifiers is the only way to re-import
-// the content script per test. It must hold at least one entry for every
-// startContentScript() call across the suite; adding tests that start the
-// content script requires adding entries here, or the pool-exhausted error fires.
-const contentScriptImports = [
-  () => import("../../src/content.js?content-harness=0"),
-  () => import("../../src/content.js?content-harness=1"),
-  () => import("../../src/content.js?content-harness=2"),
-  () => import("../../src/content.js?content-harness=3"),
-  () => import("../../src/content.js?content-harness=4"),
-  () => import("../../src/content.js?content-harness=5"),
-  () => import("../../src/content.js?content-harness=6"),
-  () => import("../../src/content.js?content-harness=7"),
-  () => import("../../src/content.js?content-harness=8"),
-  () => import("../../src/content.js?content-harness=9"),
-  () => import("../../src/content.js?content-harness=10"),
-  () => import("../../src/content.js?content-harness=11"),
-  () => import("../../src/content.js?content-harness=12"),
-  () => import("../../src/content.js?content-harness=13"),
-  () => import("../../src/content.js?content-harness=14"),
-  () => import("../../src/content.js?content-harness=15"),
-  () => import("../../src/content.js?content-harness=16"),
-  () => import("../../src/content.js?content-harness=17"),
-  () => import("../../src/content.js?content-harness=18"),
-  () => import("../../src/content.js?content-harness=19"),
-  () => import("../../src/content.js?content-harness=20"),
-  () => import("../../src/content.js?content-harness=21"),
-  () => import("../../src/content.js?content-harness=22"),
-  () => import("../../src/content.js?content-harness=23"),
-  () => import("../../src/content.js?content-harness=24"),
-  () => import("../../src/content.js?content-harness=25"),
-  () => import("../../src/content.js?content-harness=26"),
-  () => import("../../src/content.js?content-harness=27"),
-  () => import("../../src/content.js?content-harness=28"),
-  () => import("../../src/content.js?content-harness=29"),
-  () => import("../../src/content.js?content-harness=30"),
-  () => import("../../src/content.js?content-harness=31"),
-  () => import("../../src/content.js?content-harness=32"),
-  () => import("../../src/content.js?content-harness=33"),
-  () => import("../../src/content.js?content-harness=34"),
-  () => import("../../src/content.js?content-harness=35"),
-  () => import("../../src/content.js?content-harness=36"),
-  () => import("../../src/content.js?content-harness=37"),
-];
-
-let nextContentScriptImport = 0;
+// Each start imports the script under a new query string, which makes the
+// module loader evaluate a fresh copy, like a page load.
+let contentScriptRuns = 0;
 
 /**
  * Build a configurable video double for the real content script.
@@ -83,7 +39,10 @@ export function createFakeVideo(options = {}) {
     },
     removeEventListener(type, listener) {
       const entries = listeners.get(type) ?? [];
-      listeners.set(type, entries.filter((entry) => entry !== listener));
+      listeners.set(
+        type,
+        entries.filter((entry) => entry !== listener),
+      );
     },
     getBoundingClientRect() {
       video.rectReads += 1;
@@ -92,7 +51,7 @@ export function createFakeVideo(options = {}) {
     closest(selector) {
       return typeof options.closest === "function"
         ? options.closest(selector)
-        : options.closest ?? null;
+        : (options.closest ?? null);
     },
     pause() {
       video.pauseCalls += 1;
@@ -132,11 +91,6 @@ export function createFakeVideo(options = {}) {
  * Execute a fresh instance of the real content script against dependency-free
  * browser and DOM doubles.
  *
- * Deno only grants permission-free access to dynamic imports it can see in the
- * static module graph. The bounded literal import list above therefore gives
- * every harness start a fresh query-token module without widening test
- * permissions.
- *
  * @param {object} [options]
  * @returns {Promise<object>}
  */
@@ -175,6 +129,7 @@ export async function startContentScript(options = {}) {
   const mutationObservers = [];
   const animationFrames = new Map();
   const timers = new Map();
+  const createdElements = [];
   const storageWrites = [];
   let queryCount = 0;
   let nextHandle = 1;
@@ -229,8 +184,6 @@ export async function startContentScript(options = {}) {
     stopImmediatePropagation() {
       this.immediatePropagationStopped = true;
     }
-
-    stopPropagation() {}
   }
 
   class FakeMutationObserver {
@@ -256,6 +209,7 @@ export async function startContentScript(options = {}) {
   const document = {
     readyState: options.readyState ?? "complete",
     body: options.body ?? null,
+    fullscreenElement: options.fullscreenElement ?? null,
     documentElement,
     querySelectorAll(selector) {
       if (selector === "video") queryCount += 1;
@@ -267,11 +221,13 @@ export async function startContentScript(options = {}) {
     removeEventListener(type, listener) {
       removeListener(documentListeners, type, listener);
     },
-    getElementById() {
-      return null;
+    getElementById(id) {
+      return createdElements.find((element) => element.id === id) ?? null;
     },
     createElement() {
-      return new FakeHTMLElement();
+      const element = new FakeHTMLElement();
+      createdElements.push(element);
+      return element;
     },
   };
 
@@ -417,14 +373,11 @@ export async function startContentScript(options = {}) {
       storageSettled = true;
       storageDeferred.resolve({ ...value });
     },
+    /** Resolves with the listener's response, which may arrive later. */
     sendMessage(message) {
-      let response;
-      for (const listener of runtimeListeners) {
-        listener(message, {}, (value) => {
-          response = value;
-        });
-      }
-      return response;
+      return new Promise((resolve) => {
+        for (const listener of runtimeListeners) listener(message, {}, resolve);
+      });
     },
     dispatchKey(init = {}) {
       const event = new FakeKeyboardEvent("keydown", init);
@@ -467,14 +420,8 @@ export async function startContentScript(options = {}) {
     },
   };
 
-  const importContentScript = contentScriptImports[nextContentScriptImport++];
-  if (!importContentScript) {
-    restoreDescriptors();
-    throw new Error("content harness literal import pool exhausted");
-  }
-
   try {
-    await importContentScript();
+    await import(`../../src/content.js?run=${++contentScriptRuns}`);
   } catch (error) {
     restoreDescriptors();
     throw error;
@@ -491,7 +438,10 @@ function addListener(listeners, type, listener) {
 
 function removeListener(listeners, type, listener) {
   const entries = listeners.get(type) ?? [];
-  listeners.set(type, entries.filter((entry) => entry !== listener));
+  listeners.set(
+    type,
+    entries.filter((entry) => entry !== listener),
+  );
 }
 
 function deferred() {

@@ -4,42 +4,43 @@
  * Copyright (C) 2026 hawkff
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-import { assert, assertEquals, assertFalse } from "@std/assert";
+import { test } from "bun:test";
+import assert from "node:assert/strict";
 import { deferred, startPopup } from "./helpers/popup_harness.js";
 
 function storageSetCalls(env) {
   return env.calls.filter((call) => call.api === "storage.set");
 }
 
-Deno.test("bootstrap renders the stored speed and all presets", async () => {
+test("bootstrap renders the stored speed and all presets", async () => {
   let env;
   try {
     env = await startPopup({ stored: { speed: 1.5 } });
 
-    assertEquals(env.els["current-speed"].textContent, "1.5x");
-    assertEquals(env.els["slider"].value, "1.5");
-    assertEquals(env.presetButtons().length, 10);
+    assert.deepEqual(env.els["current-speed"].textContent, "1.5x");
+    assert.deepEqual(env.els.slider.value, "1.5");
+    assert.deepEqual(env.presetButtons().length, 10);
   } finally {
     env?.restore();
   }
 });
 
-Deno.test("speed: storage and live success report full success", async () => {
+test("speed: storage and live success report full success", async () => {
   let env;
   try {
     env = await startPopup({ stored: { speed: 1.5 } });
 
     await env.submitCustom(2);
 
-    assertEquals(env.els["current-speed"].textContent, "2x");
-    assertEquals(env.els["custom-input"].value, "");
-    assertEquals(env.status(), { text: "Saved 2x.", warn: false });
+    assert.deepEqual(env.els["current-speed"].textContent, "2x");
+    assert.deepEqual(env.els["custom-input"].value, "");
+    assert.deepEqual(env.status(), { text: "Saved 2x.", warn: false });
   } finally {
     env?.restore();
   }
 });
 
-Deno.test("speed: total failure reverts and warns, keeps input", async () => {
+test("speed: total failure reverts and warns, keeps input", async () => {
   let env;
   try {
     env = await startPopup({
@@ -54,9 +55,9 @@ Deno.test("speed: total failure reverts and warns, keeps input", async () => {
 
     await env.submitCustom(2);
 
-    assertEquals(env.els["current-speed"].textContent, "1.5x");
-    assertEquals(env.els["custom-input"].value, "2");
-    assertEquals(env.status(), {
+    assert.deepEqual(env.els["current-speed"].textContent, "1.5x");
+    assert.deepEqual(env.els["custom-input"].value, "2");
+    assert.deepEqual(env.status(), {
       text: "Couldn't save or apply that speed.",
       warn: true,
     });
@@ -65,7 +66,7 @@ Deno.test("speed: total failure reverts and warns, keeps input", async () => {
   }
 });
 
-Deno.test("speed: live-only success keeps state and warns about saving", async () => {
+test("speed: live-only success keeps state and warns about saving", async () => {
   let env;
   try {
     env = await startPopup({
@@ -77,9 +78,9 @@ Deno.test("speed: live-only success keeps state and warns about saving", async (
 
     await env.submitCustom(2);
 
-    assertEquals(env.els["current-speed"].textContent, "2x");
-    assertEquals(env.els["custom-input"].value, "");
-    assertEquals(env.status(), {
+    assert.deepEqual(env.els["current-speed"].textContent, "2x");
+    assert.deepEqual(env.els["custom-input"].value, "");
+    assert.deepEqual(env.status(), {
       text: "Speed set for this tab, but couldn't save the speed.",
       warn: true,
     });
@@ -88,7 +89,7 @@ Deno.test("speed: live-only success keeps state and warns about saving", async (
   }
 });
 
-Deno.test("speed: storage-only success keeps state and asks to reload", async () => {
+test("speed: storage-only success keeps state and asks to reload", async () => {
   let env;
   try {
     env = await startPopup({
@@ -100,9 +101,9 @@ Deno.test("speed: storage-only success keeps state and asks to reload", async ()
 
     await env.submitCustom(2);
 
-    assertEquals(env.els["current-speed"].textContent, "2x");
-    assertEquals(env.els["custom-input"].value, "");
-    assertEquals(env.status(), {
+    assert.deepEqual(env.els["current-speed"].textContent, "2x");
+    assert.deepEqual(env.els["custom-input"].value, "");
+    assert.deepEqual(env.status(), {
       text: "Saved 2x. Open or reload YouTube to apply it.",
       warn: true,
     });
@@ -111,24 +112,24 @@ Deno.test("speed: storage-only success keeps state and asks to reload", async ()
   }
 });
 
-Deno.test("settings: storage and live success report saved", async () => {
+test("settings: storage and live success report saved", async () => {
   let env;
   try {
     env = await startPopup({
       stored: { settings: { enableOnWatch: false } },
     });
-    assertFalse(env.els["enable-on-watch"].checked);
+    assert.equal(env.els["enable-on-watch"].checked, false);
 
     await env.toggleEnableOnWatch(true);
 
     assert(env.els["enable-on-watch"].checked);
-    assertEquals(env.status(), { text: "Setting saved.", warn: false });
+    assert.deepEqual(env.status(), { text: "Setting saved.", warn: false });
   } finally {
     env?.restore();
   }
 });
 
-Deno.test("settings: total failure reverts checkbox and warns", async () => {
+test("settings: total failure reverts checkbox and warns", async () => {
   let env;
   try {
     env = await startPopup({
@@ -143,8 +144,8 @@ Deno.test("settings: total failure reverts checkbox and warns", async () => {
 
     await env.toggleEnableOnWatch(true);
 
-    assertFalse(env.els["enable-on-watch"].checked);
-    assertEquals(env.status(), {
+    assert.equal(env.els["enable-on-watch"].checked, false);
+    assert.deepEqual(env.status(), {
       text: "Couldn't save or apply that setting.",
       warn: true,
     });
@@ -153,7 +154,7 @@ Deno.test("settings: total failure reverts checkbox and warns", async () => {
   }
 });
 
-Deno.test("settings: storage-only success stays checked and asks to reload", async () => {
+test("settings: storage-only success stays checked and asks to reload", async () => {
   let env;
   try {
     env = await startPopup({
@@ -166,7 +167,7 @@ Deno.test("settings: storage-only success stays checked and asks to reload", asy
     await env.toggleEnableOnWatch(true);
 
     assert(env.els["enable-on-watch"].checked);
-    assertEquals(env.status(), {
+    assert.deepEqual(env.status(), {
       text: "Setting saved. Open or reload YouTube to apply it.",
       warn: true,
     });
@@ -175,7 +176,7 @@ Deno.test("settings: storage-only success stays checked and asks to reload", asy
   }
 });
 
-Deno.test("settings: live-only success stays checked and warns about saving", async () => {
+test("settings: live-only success stays checked and warns about saving", async () => {
   let env;
   try {
     env = await startPopup({
@@ -188,7 +189,7 @@ Deno.test("settings: live-only success stays checked and warns about saving", as
     await env.toggleEnableOnWatch(true);
 
     assert(env.els["enable-on-watch"].checked);
-    assertEquals(env.status(), {
+    assert.deepEqual(env.status(), {
       text: "Applied for this tab, but couldn't save the setting.",
       warn: true,
     });
@@ -197,7 +198,7 @@ Deno.test("settings: live-only success stays checked and warns about saving", as
   }
 });
 
-Deno.test("speed: overlapping requests are serialized and stale failure cannot touch the UI", async () => {
+test("speed: overlapping requests are serialized and stale failure cannot touch the UI", async () => {
   const olderStorage = deferred();
   const newerStorage = deferred();
   let env;
@@ -218,38 +219,38 @@ Deno.test("speed: overlapping requests are serialized and stale failure cannot t
     // queue.
     const older = env.submitCustom(2);
     await env.flush();
-    assertEquals(storageSetCalls(env).length, 1);
-    assertEquals(storageSetCalls(env)[0].value, { speed: 2 });
+    assert.deepEqual(storageSetCalls(env).length, 1);
+    assert.deepEqual(storageSetCalls(env)[0].value, { speed: 2 });
 
     // Newer operation renders optimistically but must not reach storage yet.
     const newer = env.submitCustom(3);
     await env.flush();
-    assertEquals(storageSetCalls(env).length, 1);
-    assertEquals(env.els["current-speed"].textContent, "3x");
+    assert.deepEqual(storageSetCalls(env).length, 1);
+    assert.deepEqual(env.els["current-speed"].textContent, "3x");
 
     // Older fails completely, but it is stale: no rollback, no status, and
     // it must not clear the newer input.
     olderStorage.reject(new Error("storage down"));
     await older;
-    assertEquals(env.els["current-speed"].textContent, "3x");
-    assertEquals(env.els["custom-input"].value, "3");
-    assertEquals(env.status(), bootstrapStatus);
+    assert.deepEqual(env.els["current-speed"].textContent, "3x");
+    assert.deepEqual(env.els["custom-input"].value, "3");
+    assert.deepEqual(env.status(), bootstrapStatus);
 
     // Newer proceeds only after the older settled, and wins the UI.
     await env.flush();
-    assertEquals(storageSetCalls(env).length, 2);
-    assertEquals(storageSetCalls(env)[1].value, { speed: 3 });
+    assert.deepEqual(storageSetCalls(env).length, 2);
+    assert.deepEqual(storageSetCalls(env)[1].value, { speed: 3 });
     newerStorage.resolve();
     await newer;
-    assertEquals(env.els["current-speed"].textContent, "3x");
-    assertEquals(env.els["custom-input"].value, "");
-    assertEquals(env.status(), { text: "Saved 3x.", warn: false });
+    assert.deepEqual(env.els["current-speed"].textContent, "3x");
+    assert.deepEqual(env.els["custom-input"].value, "");
+    assert.deepEqual(env.status(), { text: "Saved 3x.", warn: false });
   } finally {
     env?.restore();
   }
 });
 
-Deno.test("settings: overlapping requests are serialized and stale failure cannot revert", async () => {
+test("settings: overlapping requests are serialized and stale failure cannot revert", async () => {
   const olderStorage = deferred();
   const newerStorage = deferred();
   let env;
@@ -269,39 +270,39 @@ Deno.test("settings: overlapping requests are serialized and stale failure canno
     // Older operation turns the setting on; storage stays pending.
     const older = env.toggleEnableOnWatch(true);
     await env.flush();
-    assertEquals(storageSetCalls(env).length, 1);
-    assertEquals(storageSetCalls(env)[0].value, {
+    assert.deepEqual(storageSetCalls(env).length, 1);
+    assert.deepEqual(storageSetCalls(env)[0].value, {
       settings: { enableOnWatch: true },
     });
 
     // Newer operation flips it back off; must not reach storage yet.
     const newer = env.toggleEnableOnWatch(false);
     await env.flush();
-    assertEquals(storageSetCalls(env).length, 1);
-    assertFalse(env.els["enable-on-watch"].checked);
+    assert.deepEqual(storageSetCalls(env).length, 1);
+    assert.equal(env.els["enable-on-watch"].checked, false);
 
     // Older fails completely but is stale: no revert, no status change.
     olderStorage.reject(new Error("storage down"));
     await older;
-    assertFalse(env.els["enable-on-watch"].checked);
-    assertEquals(env.status(), bootstrapStatus);
+    assert.equal(env.els["enable-on-watch"].checked, false);
+    assert.deepEqual(env.status(), bootstrapStatus);
 
     // Newer proceeds and reports success.
     await env.flush();
-    assertEquals(storageSetCalls(env).length, 2);
-    assertEquals(storageSetCalls(env)[1].value, {
+    assert.deepEqual(storageSetCalls(env).length, 2);
+    assert.deepEqual(storageSetCalls(env)[1].value, {
       settings: { enableOnWatch: false },
     });
     newerStorage.resolve();
     await newer;
-    assertFalse(env.els["enable-on-watch"].checked);
-    assertEquals(env.status(), { text: "Setting saved.", warn: false });
+    assert.equal(env.els["enable-on-watch"].checked, false);
+    assert.deepEqual(env.status(), { text: "Setting saved.", warn: false });
   } finally {
     env?.restore();
   }
 });
 
-Deno.test("raw API error details never reach the status line", async () => {
+test("raw API error details never reach the status line", async () => {
   let env;
   try {
     env = await startPopup({
@@ -315,16 +316,16 @@ Deno.test("raw API error details never reach the status line", async () => {
     });
 
     await env.submitCustom(2);
-    assertFalse(env.els["status"].textContent.includes("SENTINEL"));
+    assert.equal(env.els.status.textContent.includes("SENTINEL"), false);
 
     await env.toggleEnableOnWatch(true);
-    assertFalse(env.els["status"].textContent.includes("SENTINEL"));
+    assert.equal(env.els.status.textContent.includes("SENTINEL"), false);
   } finally {
     env?.restore();
   }
 });
 
-Deno.test("popup startup: stale reads preserve accepted edits and rollback values", async () => {
+test("popup startup: stale reads preserve accepted edits and rollback values", async () => {
   for (const delayedRead of ["storage", "state"]) {
     const initialRead = deferred();
     const initial = { speed: 1.5, settings: { enableOnWatch: false } };
@@ -350,15 +351,15 @@ Deno.test("popup startup: stale reads preserve accepted edits and rollback value
       initialRead.resolve(initial);
       await env.flush();
 
-      assertEquals(env.els["current-speed"].textContent, "2x", delayedRead);
-      assertEquals(env.els["enable-on-watch"].checked, true, delayedRead);
-      assertEquals(env.status(), status, delayedRead);
+      assert.deepEqual(env.els["current-speed"].textContent, "2x", delayedRead);
+      assert.deepEqual(env.els["enable-on-watch"].checked, true, delayedRead);
+      assert.deepEqual(env.status(), status, delayedRead);
 
       fail = true;
       await env.submitCustom(3);
       await env.toggleEnableOnWatch(false);
-      assertEquals(env.els["current-speed"].textContent, "2x", delayedRead);
-      assertEquals(env.els["enable-on-watch"].checked, true, delayedRead);
+      assert.deepEqual(env.els["current-speed"].textContent, "2x", delayedRead);
+      assert.deepEqual(env.els["enable-on-watch"].checked, true, delayedRead);
     } finally {
       initialRead.resolve(initial);
       await env?.flush();
@@ -367,7 +368,7 @@ Deno.test("popup startup: stale reads preserve accepted edits and rollback value
   }
 });
 
-Deno.test("popup startup: an edit does not discard the other field's initial value", async () => {
+test("popup startup: an edit does not discard the other field's initial value", async () => {
   for (const edited of ["speed", "settings"]) {
     const initialRead = deferred();
     const initial = { speed: 1.5, settings: { enableOnWatch: true } };
@@ -379,11 +380,11 @@ Deno.test("popup startup: an edit does not discard the other field's initial val
       initialRead.resolve(initial);
       await env.flush();
 
-      assertEquals(
+      assert.deepEqual(
         env.els["current-speed"].textContent,
         edited === "speed" ? "2x" : "1.5x",
       );
-      assertEquals(env.els["enable-on-watch"].checked, edited === "speed");
+      assert.deepEqual(env.els["enable-on-watch"].checked, edited === "speed");
     } finally {
       initialRead.resolve(initial);
       await env?.flush();
@@ -392,7 +393,7 @@ Deno.test("popup startup: an edit does not discard the other field's initial val
   }
 });
 
-Deno.test("popup startup: failed early edits still receive the stored baseline", async () => {
+test("popup startup: failed early edits still receive the stored baseline", async () => {
   const initialRead = deferred();
   const initial = { speed: 1.5, settings: { enableOnWatch: true } };
   let env;
@@ -413,10 +414,10 @@ Deno.test("popup startup: failed early edits still receive the stored baseline",
     initialRead.resolve(initial);
     await env.flush();
 
-    assertEquals(env.els["current-speed"].textContent, "1.5x");
-    assertEquals(env.els["enable-on-watch"].checked, true);
-    assertEquals(env.status(), status);
-    assertEquals(env.status().warn, true);
+    assert.deepEqual(env.els["current-speed"].textContent, "1.5x");
+    assert.deepEqual(env.els["enable-on-watch"].checked, true);
+    assert.deepEqual(env.status(), status);
+    assert.deepEqual(env.status().warn, true);
   } finally {
     initialRead.resolve(initial);
     await env?.flush();
@@ -424,7 +425,7 @@ Deno.test("popup startup: failed early edits still receive the stored baseline",
   }
 });
 
-Deno.test("popup startup: pending edits survive initialization and settle correctly", async () => {
+test("popup startup: pending edits survive initialization and settle correctly", async () => {
   for (const fail of [false, true]) {
     const initialRead = deferred();
     const pendingSave = deferred();
@@ -447,13 +448,16 @@ Deno.test("popup startup: pending edits survive initialization and settle correc
       const toggled = env.toggleEnableOnWatch(false);
       initialRead.resolve(initial);
       await env.flush();
-      assertEquals(env.els["current-speed"].textContent, "2x");
-      assertEquals(env.els["enable-on-watch"].checked, false);
+      assert.deepEqual(env.els["current-speed"].textContent, "2x");
+      assert.deepEqual(env.els["enable-on-watch"].checked, false);
 
       pendingSave.resolve();
       await Promise.all([submitted, toggled]);
-      assertEquals(env.els["current-speed"].textContent, fail ? "1.5x" : "2x");
-      assertEquals(env.els["enable-on-watch"].checked, fail);
+      assert.deepEqual(
+        env.els["current-speed"].textContent,
+        fail ? "1.5x" : "2x",
+      );
+      assert.deepEqual(env.els["enable-on-watch"].checked, fail);
     } finally {
       initialRead.resolve(initial);
       pendingSave.resolve();
@@ -463,7 +467,7 @@ Deno.test("popup startup: pending edits survive initialization and settle correc
   }
 });
 
-Deno.test("speed status: inactive watch pages report saving, not playback", async () => {
+test("speed status: inactive watch pages report saving, not playback", async () => {
   let env;
   try {
     env = await startPopup({
@@ -471,31 +475,56 @@ Deno.test("speed status: inactive watch pages report saving, not playback", asyn
       state: {
         speed: 1,
         isWatch: true,
-        isActive: false,
         settings: { enableOnWatch: false },
       },
     });
     await env.submitCustom(2);
-    assertEquals(env.status(), { text: "Saved 2x.", warn: false });
-    assertEquals(env.els["enable-on-watch"].checked, false);
+    assert.deepEqual(env.status(), { text: "Saved 2x.", warn: false });
+    assert.deepEqual(env.els["enable-on-watch"].checked, false);
   } finally {
     env?.restore();
   }
 });
 
-Deno.test("speed status: startup does not claim playback when no video exists", async () => {
+test("speed status: Shorts startup reports the selected speed", async () => {
+  let env;
+  try {
+    env = await startPopup({ state: { speed: 2, isShorts: true } });
+    assert.deepEqual(env.status(), {
+      text: "Selected speed: 2x.",
+      warn: false,
+    });
+  } finally {
+    env?.restore();
+  }
+});
+
+test("popup startup: live state is requested without waiting for storage", async () => {
+  const storageRead = deferred();
   let env;
   try {
     env = await startPopup({
-      state: { speed: 2, isShorts: true, isActive: true, hasVideo: false },
+      onStorageGet: () => storageRead.promise,
+      state: { speed: 2, isShorts: true },
     });
-    assertEquals(env.status(), { text: "Selected speed: 2x.", warn: false });
+    assert(
+      env.calls.some(
+        (call) =>
+          call.api === "sendMessage" && call.message.type === "GET_STATE",
+      ),
+    );
+
+    storageRead.resolve({ speed: 1.5 });
+    await env.flush();
+    assert.deepEqual(env.els["current-speed"].textContent, "2x");
   } finally {
+    storageRead.resolve({});
+    await env?.flush();
     env?.restore();
   }
 });
 
-Deno.test("custom draft: successful submission preserves newly typed text", async () => {
+test("custom draft: successful submission preserves newly typed text", async () => {
   let pendingSave = deferred();
   let env;
   try {
@@ -507,7 +536,7 @@ Deno.test("custom draft: successful submission preserves newly typed text", asyn
       env.els["custom-input"].value = draft;
       pendingSave.resolve();
       await submitted;
-      assertEquals(env.els["custom-input"].value, draft);
+      assert.deepEqual(env.els["custom-input"].value, draft);
     }
   } finally {
     pendingSave.resolve();

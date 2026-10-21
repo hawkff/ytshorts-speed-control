@@ -3,11 +3,9 @@
 **/._*
 .DS_Store
 
-#IDE
-.agents*
-skills-lock.json
+# Dependencies
+/node_modules/
 
 # Release artifacts
 /dist/
 /.package-tmp/
-

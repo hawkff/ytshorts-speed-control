@@ -1,0 +1,11 @@
+{
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "scripts": {
+    "check": "biome check && bun test",
+    "package": "bun scripts/package.js"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15"
+  }
+}

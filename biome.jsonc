@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": { "includes": ["**", "!icons"] },
+  "formatter": { "indentStyle": "space" },
+  "overrides": [
+    {
+      // Browsers load these as classic scripts, where "use strict" is not
+      // implied. Biome parses every .js file as a module.
+      "includes": ["lib/**", "src/**"],
+      "linter": {
+        "rules": { "suspicious": { "noRedundantUseStrict": "off" } }
+      }
+    }
+  ]
+}
