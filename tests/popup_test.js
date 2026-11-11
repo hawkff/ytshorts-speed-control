@@ -6,6 +6,7 @@
  */
 import { test } from "bun:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { deferred, startPopup } from "./helpers/popup_harness.js";
 
 function storageSetCalls(env) {
@@ -19,7 +20,35 @@ test("bootstrap renders the stored speed and all presets", async () => {
 
     assert.deepEqual(env.els["current-speed"].textContent, "1.5x");
     assert.deepEqual(env.els.slider.value, "1.5");
+    assert.deepEqual(env.els.slider.ariaValueText, "1.5x");
     assert.deepEqual(env.presetButtons().length, 10);
+    // Only the matching preset reports itself as pressed.
+    assert.deepEqual(
+      env
+        .presetButtons()
+        .filter((btn) => btn.ariaPressed === "true")
+        .map((btn) => btn.dataset.speed),
+      ["1.5"],
+    );
+  } finally {
+    env?.restore();
+  }
+});
+
+test("slider speaks the real speed, also while dragging", async () => {
+  let env;
+  try {
+    // 8x is past the slider's 4x end, where the thumb stops.
+    env = await startPopup({ stored: { speed: 8 } });
+    assert.deepEqual(env.els.slider.ariaValueText, "8x");
+
+    env.els.slider.value = "2.5";
+    await env.els.slider.dispatch("input");
+
+    assert.deepEqual(env.els["current-speed"].textContent, "2.5x");
+    assert.deepEqual(env.els.slider.ariaValueText, "2.5x");
+    // A drag only previews; releasing the slider saves.
+    assert.deepEqual(storageSetCalls(env), []);
   } finally {
     env?.restore();
   }
@@ -499,6 +528,20 @@ test("speed status: Shorts startup reports the selected speed", async () => {
   }
 });
 
+test("popup startup: a YouTube tab that does not answer asks for a reload", async () => {
+  let env;
+  try {
+    // The default tab is a YouTube Short; without `state` nothing answers.
+    env = await startPopup();
+    assert.deepEqual(env.status(), {
+      text: "Reload this tab to control playback.",
+      warn: true,
+    });
+  } finally {
+    env?.restore();
+  }
+});
+
 test("popup startup: live state is requested without waiting for storage", async () => {
   const storageRead = deferred();
   let env;
@@ -521,6 +564,25 @@ test("popup startup: live state is requested without waiting for storage", async
     storageRead.resolve({});
     await env?.flush();
     env?.restore();
+  }
+});
+
+test("custom input: the browser accepts every speed the parser does", async () => {
+  const html = await readFile(
+    new URL("../src/popup.html", import.meta.url),
+    "utf8",
+  );
+  const input = html.match(/<input[^>]*id="custom-input"[^>]*>/)?.[0] ?? "";
+  const { SPEED_MIN, SPEED_MAX } = globalThis.YTShortsSpeed;
+
+  // The browser validates before popup.js sees the value. A step coarser
+  // than the parser's two decimals makes it refuse speeds such as 1.33.
+  for (const attribute of [
+    'step="0.01"',
+    `min="${SPEED_MIN}"`,
+    `max="${SPEED_MAX}"`,
+  ]) {
+    assert(input.includes(attribute), attribute);
   }
 });
 

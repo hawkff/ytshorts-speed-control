@@ -27,6 +27,42 @@ test("stored speed is applied to a playing video after init", async () => {
   }
 });
 
+test("startup does not wait for the page to finish loading", async () => {
+  let env;
+  try {
+    env = await startContentScript({
+      readyState: "loading",
+      stored: { speed: 2 },
+    });
+    await env.ready;
+
+    // A popup opened mid-load gets the saved speed, not a missing receiver.
+    const state = await env.sendMessage({ type: "GET_STATE" });
+    assert.deepEqual(state.speed, 2);
+  } finally {
+    await env?.restore();
+  }
+});
+
+test("a lone video is managed without measuring its layout", async () => {
+  const video = createFakeVideo({
+    paused: false,
+    currentSrc: "https://example.test/lone.mp4",
+    rect: { left: 100, top: 100, width: 400, height: 400 },
+  });
+  let env;
+  try {
+    env = await startContentScript({ videos: [video], stored: { speed: 2 } });
+    await env.ready;
+
+    assert.deepEqual(video.rateWrites, [2]);
+    // getBoundingClientRect forces a layout; one candidate needs no ranking.
+    assert.deepEqual(video.rectReads, 0);
+  } finally {
+    await env?.restore();
+  }
+});
+
 test("visible video wins over an earlier off-screen playing video", async () => {
   const offscreen = createFakeVideo({
     paused: false,
@@ -228,6 +264,37 @@ test("active-page mutation bursts coalesce into one frame and one scan", async (
   }
 });
 
+test("a video mounted later is managed on the next frame with one scan", async () => {
+  const first = createFakeVideo({
+    paused: false,
+    currentSrc: "https://example.test/first.mp4",
+    rect: { left: 50, top: 50, width: 200, height: 200 },
+  });
+  const mounted = createFakeVideo({
+    paused: false,
+    currentSrc: "https://example.test/mounted.mp4",
+    rect: { left: 300, top: 100, width: 500, height: 500 },
+  });
+  const videos = [first];
+  let env;
+  try {
+    env = await startContentScript({ videos, stored: { speed: 2 } });
+    await env.ready;
+    assert.deepEqual(first.rateWrites, [2]);
+
+    // The harness reads this array on every scan, like a live document.
+    videos.push(mounted);
+    env.triggerMutation();
+    const baseline = env.queryCount;
+    await env.flushAnimationFrames();
+
+    assert.deepEqual(mounted.rateWrites, [2]);
+    assert.deepEqual(env.queryCount, baseline + 1);
+  } finally {
+    await env?.restore();
+  }
+});
+
 test("a queued frame re-checks activity before scanning", async () => {
   const video = createFakeVideo({
     paused: false,
@@ -407,6 +474,43 @@ test("P and speed target the same visible video", async () => {
   }
 });
 
+test("P drives YouTube's own play button when the player shows one", async () => {
+  let clicks = 0;
+  let button = null;
+  const video = createFakeVideo({
+    paused: false,
+    currentSrc: "https://example.test/native.mp4",
+    rect: { left: 100, top: 100, width: 400, height: 400 },
+    closest: () => ({ querySelector: () => button }),
+  });
+  let env;
+  try {
+    env = await startContentScript({ videos: [video], stored: { speed: 2 } });
+    await env.ready;
+    // Built after startup: HTMLElement is the harness double only by then.
+    button = new globalThis.HTMLElement();
+    button.getBoundingClientRect = () => ({ width: 40, height: 40 });
+    button.click = () => {
+      clicks += 1;
+      video.paused = !video.paused;
+    };
+
+    env.dispatchKey({ key: "p", code: "KeyP" });
+    assert.deepEqual(clicks, 1);
+    assert.deepEqual(video.paused, true);
+    assert.deepEqual(pauseSweepTimers(env).length, 1);
+
+    // Resuming goes through the same button, never a direct play() call.
+    env.dispatchKey({ key: "p", code: "KeyP" });
+    assert.deepEqual(clicks, 2);
+    assert.deepEqual(video.paused, false);
+    assert.deepEqual(video.playCalls, 0);
+    assert.deepEqual(pauseSweepTimers(env).length, 0);
+  } finally {
+    await env?.restore();
+  }
+});
+
 test("] steps the speed up and persists it", async () => {
   const video = createFakeVideo({
     paused: false,
@@ -534,6 +638,35 @@ test("the speed badge follows the player in and out of fullscreen", async () => 
   }
 });
 
+test("a popup speed change shows no badge on a page left alone", async () => {
+  const video = createFakeVideo({
+    paused: false,
+    currentSrc: "https://example.test/quiet.mp4",
+    rect: { left: 100, top: 100, width: 400, height: 400 },
+  });
+  const body = fakeContainer();
+  let env;
+  try {
+    env = await startContentScript({
+      pathname: "/watch",
+      href: "https://www.youtube.com/watch?v=example",
+      videos: [video],
+      stored: { speed: 2, settings: { enableOnWatch: false } },
+      body,
+    });
+    await env.ready;
+
+    const response = await env.sendMessage({ type: "SET_SPEED", value: 3 });
+
+    // The speed is saved, but the video keeps 1x, so a 3x badge would lie.
+    assert.deepEqual(response, { ok: true, speed: 3 });
+    assert.deepEqual(video.rateWrites, []);
+    assert.deepEqual(body.children, []);
+  } finally {
+    await env?.restore();
+  }
+});
+
 test("GET_STATE during startup answers with the stored values", async () => {
   let env;
   try {
@@ -559,7 +692,7 @@ test("GET_STATE during startup answers with the stored values", async () => {
   }
 });
 
-test("modified combos are left to the browser", async () => {
+test("modified combos are left to the browser and the page", async () => {
   const video = createFakeVideo({
     paused: false,
     currentSrc: "https://example.test/modified.mp4",
@@ -574,11 +707,14 @@ test("modified combos are left to the browser", async () => {
       env.dispatchKey({ key: "]", code: "BracketRight", metaKey: true }),
       env.dispatchKey({ key: "[", code: "BracketLeft", ctrlKey: true }),
       env.dispatchKey({ key: "Backspace", code: "Backspace", altKey: true }),
+      // Shift+P is YouTube's previous-video key on regular videos.
+      env.dispatchKey({ key: "P", code: "KeyP", shiftKey: true }),
     ];
 
     for (const event of events) {
       assert.deepEqual(event.defaultPrevented, false);
     }
+    assert.deepEqual(video.pauseCalls, 0);
     assert.deepEqual(video.rateWrites, [2]);
     assert.deepEqual(
       env.storageWrites.some((write) => "speed" in write),

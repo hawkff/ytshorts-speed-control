@@ -101,7 +101,8 @@
    */
   function findActiveVideo() {
     const videos = Array.from(document.querySelectorAll("video"));
-    if (videos.length === 0) return null;
+    // A lone video is the answer whatever its layout, so skip measuring it.
+    if (videos.length < 2) return videos[0] ?? null;
 
     let best = null;
     let bestArea = 0;
@@ -236,13 +237,14 @@
   /**
    * Persist + apply a new desired speed.
    * @param {number} value
-   * @param {boolean} [showOverlay]
    */
-  function setSpeed(value, showOverlay = true) {
+  function setSpeed(value) {
     speedRevision += 1;
     desiredSpeed = Speed.clampSpeed(value);
     reapply();
-    if (showOverlay) showIndicator(desiredSpeed);
+    // The badge reports the playing speed, so it stays hidden on pages where
+    // this script leaves the video alone.
+    if (isActivePage()) showIndicator(desiredSpeed);
     try {
       extensionApi.storage.local
         .set({ [STORAGE_KEY]: desiredSpeed })
@@ -398,12 +400,16 @@
   }
 
   /**
+   * Whether the event is P with no modifier. Shift+P is YouTube's
+   * previous-video key, so it does not count.
    * @param {Event} event
    * @returns {boolean}
    */
   function isPlainPauseShortcut(event) {
     if (!(event instanceof KeyboardEvent)) return false;
-    if (event.ctrlKey || event.metaKey || event.altKey) return false;
+    if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) {
+      return false;
+    }
     return event.key === "p" || event.key === "P" || event.code === "KeyP";
   }
 
@@ -648,8 +654,8 @@
       return;
     }
     if (action === "reset" && (e.ctrlKey || e.metaKey || e.altKey)) return;
-    // P is a plain shortcut; never hijack Cmd/Ctrl+P (print) etc.
-    if (action === "pause" && (e.ctrlKey || e.metaKey || e.altKey)) return;
+    // P is a plain shortcut; never hijack Cmd/Ctrl+P (print) or Shift+P.
+    if (action === "pause" && !isPlainPauseShortcut(e)) return;
 
     // We acted: stop YouTube from also reacting before we perform side effects
     // like clicking its native play/pause button.
@@ -711,13 +717,9 @@
       // (SPA navigation); re-check the policy boundary before scanning.
       if (!isActivePage()) return releaseVideoAtDefaultRate();
       const active = findActiveVideo();
-      if (active && active !== managedVideo) reapply();
+      if (active && active !== managedVideo) attachTo(active);
     };
-    if (typeof requestAnimationFrame === "function") {
-      requestAnimationFrame(run);
-    } else {
-      setTimeout(run, 16);
-    }
+    requestAnimationFrame(run);
   }
 
   function startObservers() {
@@ -821,9 +823,9 @@
   // ] / [ / Backspace before YouTube's own handlers can act on them.
   globalThis.addEventListener("keydown", onKeyDown, true);
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init, { once: true });
-  } else {
-    init();
-  }
+  // Init needs no parsed page, so it starts at document_start too: the saved
+  // speed is read while the page loads instead of after it.
+  // shortcut: a key pressed before that read returns still steps from 1x,
+  // gate the key steps on storageLoaded if that ever shows up.
+  init();
 })();
