@@ -80,10 +80,19 @@
     els.status.classList.toggle("warn", !!isWarn);
   }
 
+  /** Show a speed in the readout and as the slider's spoken value. */
+  function showSpeed(speed) {
+    const label = Speed.formatSpeed(speed);
+    els.current.textContent = label;
+    // The thumb snaps to the slider's own steps and range, so assistive tech
+    // would otherwise read 1.35 for 1.33x, or 4 for 8x.
+    els.slider.ariaValueText = label;
+  }
+
   /** Reflect a speed value across all controls. */
   function render(speed) {
     currentSpeed = Speed.clampSpeed(speed);
-    els.current.textContent = Speed.formatSpeed(currentSpeed);
+    showSpeed(currentSpeed);
 
     // The range input clamps its thumb to [0.25, 4] itself; currentSpeed keeps
     // the real value.
@@ -244,8 +253,7 @@
   function wireControls() {
     // Live preview while dragging; commit on release.
     els.slider.addEventListener("input", () => {
-      const v = Speed.clampSpeed(Number(els.slider.value));
-      els.current.textContent = Speed.formatSpeed(v);
+      showSpeed(Speed.clampSpeed(Number(els.slider.value)));
     });
     els.slider.addEventListener("change", () => {
       applySpeed(Number(els.slider.value));

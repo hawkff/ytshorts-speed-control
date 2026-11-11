@@ -20,6 +20,7 @@ test("bootstrap renders the stored speed and all presets", async () => {
 
     assert.deepEqual(env.els["current-speed"].textContent, "1.5x");
     assert.deepEqual(env.els.slider.value, "1.5");
+    assert.deepEqual(env.els.slider.ariaValueText, "1.5x");
     assert.deepEqual(env.presetButtons().length, 10);
     // Only the matching preset reports itself as pressed.
     assert.deepEqual(
@@ -29,6 +30,25 @@ test("bootstrap renders the stored speed and all presets", async () => {
         .map((btn) => btn.dataset.speed),
       ["1.5"],
     );
+  } finally {
+    env?.restore();
+  }
+});
+
+test("slider speaks the real speed, also while dragging", async () => {
+  let env;
+  try {
+    // 8x is past the slider's 4x end, where the thumb stops.
+    env = await startPopup({ stored: { speed: 8 } });
+    assert.deepEqual(env.els.slider.ariaValueText, "8x");
+
+    env.els.slider.value = "2.5";
+    await env.els.slider.dispatch("input");
+
+    assert.deepEqual(env.els["current-speed"].textContent, "2.5x");
+    assert.deepEqual(env.els.slider.ariaValueText, "2.5x");
+    // A drag only previews; releasing the slider saves.
+    assert.deepEqual(storageSetCalls(env), []);
   } finally {
     env?.restore();
   }
