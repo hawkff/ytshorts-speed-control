@@ -40,7 +40,7 @@ const ELEMENT_IDS = [
 
 /**
  * Minimal element double covering everything the popup script touches:
- * textContent, value, min/max, checked, dataset, classList.toggle/contains,
+ * textContent, value, checked, dataset, classList.toggle/contains,
  * querySelectorAll, appendChild, and async-aware event dispatch.
  */
 function createFakeElement(tagName = "div") {
@@ -50,8 +50,6 @@ function createFakeElement(tagName = "div") {
     tagName: String(tagName).toUpperCase(),
     textContent: "",
     value: "",
-    min: "",
-    max: "",
     checked: false,
     type: "",
     className: "",
@@ -160,9 +158,6 @@ export async function startPopup(options = {}) {
           : "div",
     );
   }
-  // Mirror the slider bounds from popup.html; render() reads them.
-  els.slider.min = "0.25";
-  els.slider.max = "4";
 
   const tab =
     "tab" in options

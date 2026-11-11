@@ -85,17 +85,16 @@
     currentSpeed = Speed.clampSpeed(speed);
     els.current.textContent = Speed.formatSpeed(currentSpeed);
 
-    // Slider is bounded to [0.25, 4]; clamp the thumb without losing the value.
-    const sliderMin = Number(els.slider.min);
-    const sliderMax = Number(els.slider.max);
-    els.slider.value = String(
-      Math.min(sliderMax, Math.max(sliderMin, currentSpeed)),
-    );
+    // The range input clamps its thumb to [0.25, 4] itself; currentSpeed keeps
+    // the real value.
+    els.slider.value = String(currentSpeed);
 
     const buttons = els.presets.querySelectorAll(".preset-btn");
     buttons.forEach((btn) => {
-      const val = Number(btn.dataset.speed);
-      btn.classList.toggle("active", Math.abs(val - currentSpeed) < 1e-9);
+      const active = Math.abs(Number(btn.dataset.speed) - currentSpeed) < 1e-9;
+      btn.classList.toggle("active", active);
+      // Color alone does not tell a screen reader which preset is on.
+      btn.ariaPressed = String(active);
     });
   }
 
@@ -326,7 +325,8 @@
     } else if (state) {
       setStatus("Speed applies on Shorts (and videos, if enabled).", false);
     } else {
-      setStatus("Ready.", false);
+      // No answer from the page: the tab was open before the extension loaded.
+      setStatus("Reload this tab to control playback.", true);
     }
   }
 

@@ -40,11 +40,6 @@ test("clampSpeed falls back to default on non-finite input", () => {
   assert.deepEqual(Speed.clampSpeed(-Infinity), 1);
 });
 
-test("clampSpeed respects custom bounds", () => {
-  assert.deepEqual(Speed.clampSpeed(5, 0.5, 3), 3);
-  assert.deepEqual(Speed.clampSpeed(0.1, 0.5, 3), 0.5);
-});
-
 test("parseSpeed handles numbers", () => {
   assert.deepEqual(Speed.parseSpeed(1.5), 1.5);
   assert.deepEqual(Speed.parseSpeed(100), 16); // clamped

@@ -20,6 +20,14 @@ test("bootstrap renders the stored speed and all presets", async () => {
     assert.deepEqual(env.els["current-speed"].textContent, "1.5x");
     assert.deepEqual(env.els.slider.value, "1.5");
     assert.deepEqual(env.presetButtons().length, 10);
+    // Only the matching preset reports itself as pressed.
+    assert.deepEqual(
+      env
+        .presetButtons()
+        .filter((btn) => btn.ariaPressed === "true")
+        .map((btn) => btn.dataset.speed),
+      ["1.5"],
+    );
   } finally {
     env?.restore();
   }
@@ -493,6 +501,20 @@ test("speed status: Shorts startup reports the selected speed", async () => {
     assert.deepEqual(env.status(), {
       text: "Selected speed: 2x.",
       warn: false,
+    });
+  } finally {
+    env?.restore();
+  }
+});
+
+test("popup startup: a YouTube tab that does not answer asks for a reload", async () => {
+  let env;
+  try {
+    // The default tab is a YouTube Short; without `state` nothing answers.
+    env = await startPopup();
+    assert.deepEqual(env.status(), {
+      text: "Reload this tab to control playback.",
+      warn: true,
     });
   } finally {
     env?.restore();

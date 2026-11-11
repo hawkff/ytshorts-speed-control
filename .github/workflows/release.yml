@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Verify tag matches manifest version
@@ -34,6 +34,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Drop the "by @author" credit that generated notes add to each change.
+          gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+            -f tag_name="$GITHUB_REF_NAME" \
+            --jq '.body | gsub(" by @[^ ]+ in "; " in ")' > "$RUNNER_TEMP/notes.md"
           gh release create "$GITHUB_REF_NAME" dist/*.zip \
             --title "$GITHUB_REF_NAME" \
-            --generate-notes
+            --notes-file "$RUNNER_TEMP/notes.md"

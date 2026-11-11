@@ -39,7 +39,8 @@
       aria-label="Speed presets"
     ></div>
 
-    <form id="custom-form" class="custom-form" autocomplete="off">
+    <!-- novalidate: step="0.05" makes the browser refuse speeds like 1.33 -->
+    <form id="custom-form" class="custom-form" autocomplete="off" novalidate>
       <label class="custom-label" for="custom-input">Custom</label>
       <input
         id="custom-input"

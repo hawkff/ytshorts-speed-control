@@ -124,7 +124,6 @@ export async function startContentScript(options = {}) {
   const stored = options.stored ?? {};
   const runtimeListeners = [];
   const storageListeners = [];
-  const documentListeners = new Map();
   const globalListeners = new Map();
   const mutationObservers = [];
   const animationFrames = new Map();
@@ -168,6 +167,7 @@ export async function startContentScript(options = {}) {
       this.ctrlKey = init.ctrlKey ?? false;
       this.metaKey = init.metaKey ?? false;
       this.altKey = init.altKey ?? false;
+      this.shiftKey = init.shiftKey ?? false;
       this.altGraphKey = init.altGraphKey ?? false;
       this.defaultPrevented = false;
       this.immediatePropagationStopped = false;
@@ -207,19 +207,12 @@ export async function startContentScript(options = {}) {
     clientHeight: options.innerHeight ?? 1000,
   };
   const document = {
-    readyState: options.readyState ?? "complete",
     body: options.body ?? null,
     fullscreenElement: options.fullscreenElement ?? null,
     documentElement,
     querySelectorAll(selector) {
       if (selector === "video") queryCount += 1;
       return selector === "video" ? [...videos] : [];
-    },
-    addEventListener(type, listener) {
-      addListener(documentListeners, type, listener);
-    },
-    removeEventListener(type, listener) {
-      removeListener(documentListeners, type, listener);
     },
     getElementById(id) {
       return createdElements.find((element) => element.id === id) ?? null;
@@ -412,7 +405,6 @@ export async function startContentScript(options = {}) {
       for (const video of videos) video.clearEventListeners?.();
       runtimeListeners.length = 0;
       storageListeners.length = 0;
-      documentListeners.clear();
       globalListeners.clear();
       animationFrames.clear();
       timers.clear();
