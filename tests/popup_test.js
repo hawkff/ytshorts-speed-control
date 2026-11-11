@@ -6,6 +6,7 @@
  */
 import { test } from "bun:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { deferred, startPopup } from "./helpers/popup_harness.js";
 
 function storageSetCalls(env) {
@@ -543,6 +544,25 @@ test("popup startup: live state is requested without waiting for storage", async
     storageRead.resolve({});
     await env?.flush();
     env?.restore();
+  }
+});
+
+test("custom input: the browser accepts every speed the parser does", async () => {
+  const html = await readFile(
+    new URL("../src/popup.html", import.meta.url),
+    "utf8",
+  );
+  const input = html.match(/<input[^>]*id="custom-input"[^>]*>/)?.[0] ?? "";
+  const { SPEED_MIN, SPEED_MAX } = globalThis.YTShortsSpeed;
+
+  // The browser validates before popup.js sees the value. A step coarser
+  // than the parser's two decimals makes it refuse speeds such as 1.33.
+  for (const attribute of [
+    'step="0.01"',
+    `min="${SPEED_MIN}"`,
+    `max="${SPEED_MAX}"`,
+  ]) {
+    assert(input.includes(attribute), attribute);
   }
 });
 

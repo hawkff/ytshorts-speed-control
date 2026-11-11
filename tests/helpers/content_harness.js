@@ -207,6 +207,9 @@ export async function startContentScript(options = {}) {
     clientHeight: options.innerHeight ?? 1000,
   };
   const document = {
+    // The script must start while this still says "loading". The double has
+    // no addEventListener, so a wait for DOMContentLoaded throws.
+    readyState: options.readyState ?? "complete",
     body: options.body ?? null,
     fullscreenElement: options.fullscreenElement ?? null,
     documentElement,

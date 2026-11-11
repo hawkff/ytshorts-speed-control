@@ -27,6 +27,23 @@ test("stored speed is applied to a playing video after init", async () => {
   }
 });
 
+test("startup does not wait for the page to finish loading", async () => {
+  let env;
+  try {
+    env = await startContentScript({
+      readyState: "loading",
+      stored: { speed: 2 },
+    });
+    await env.ready;
+
+    // A popup opened mid-load gets the saved speed, not a missing receiver.
+    const state = await env.sendMessage({ type: "GET_STATE" });
+    assert.deepEqual(state.speed, 2);
+  } finally {
+    await env?.restore();
+  }
+});
+
 test("a lone video is managed without measuring its layout", async () => {
   const video = createFakeVideo({
     paused: false,

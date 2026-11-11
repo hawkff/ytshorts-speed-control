@@ -37,7 +37,8 @@ jobs:
           # Drop the "by @author" credit that generated notes add to each change.
           gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
             -f tag_name="$GITHUB_REF_NAME" \
-            --jq '.body | gsub(" by @[^ ]+ in "; " in ")' > "$RUNNER_TEMP/notes.md"
+            --jq '.body | gsub(" by @[^ ]+ in https://"; " in https://")' \
+            > "$RUNNER_TEMP/notes.md"
           gh release create "$GITHUB_REF_NAME" dist/*.zip \
             --title "$GITHUB_REF_NAME" \
             --notes-file "$RUNNER_TEMP/notes.md"

@@ -824,6 +824,8 @@
   globalThis.addEventListener("keydown", onKeyDown, true);
 
   // Init needs no parsed page, so it starts at document_start too: the saved
-  // speed loads before a video plays or a key steps the speed.
+  // speed is read while the page loads instead of after it.
+  // shortcut: a key pressed before that read returns still steps from 1x,
+  // gate the key steps on storageLoaded if that ever shows up.
   init();
 })();
